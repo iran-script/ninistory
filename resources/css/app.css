@@ -1,0 +1,21 @@
+@import 'vazirmatn/Vazirmatn-Variable-font-face.css';
+@import 'tailwindcss';
+@import './tokens.css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme { --font-sans: 'Vazirmatn', Tahoma, Arial, ui-sans-serif, sans-serif; }
+
+:root,
+html,
+body,
+button,
+input,
+select,
+textarea {
+    font-family: 'Vazirmatn', Tahoma, Arial, sans-serif;
+}
+
+:root { font-synthesis: none; }
+html { direction: rtl; }

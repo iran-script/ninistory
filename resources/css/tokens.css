@@ -1,0 +1,14 @@
+:root {
+  color-scheme: light;
+  --color-pink: #F6B8C8; --color-sky: #A9D8F7; --color-cream: #FFF7F1;
+  --color-peach: #FFD4B8; --color-mint: #D8EFE3; --color-brown: #6B4F4F;
+  --color-muted: #8D7F7F; --color-white: #FFFFFF; --color-border: #EFDED7;
+  --color-action: #C92E70; --color-action-hover: #AA235D;
+}
+html { font-family: 'Vazirmatn', Tahoma, Arial, sans-serif; }
+body { background: #fffdfd; color: #342a2d; font-size: 16px; line-height: 1.75; font-weight: 400; }
+:root { --color-page: #fffdfd; --color-ink: #342a2d; --color-wine: #662a3e; --color-soft-pink: #fdebf0; --color-shadow: 0 4px 16px rgb(89 52 61 / 9%); }
+input, select, button, textarea { font: inherit; }
+img { max-width: 100%; }
+:focus-visible { outline: 3px solid #375DA6; outline-offset: 3px; }
+@media (min-width: 768px) { .home-hero { min-height: 300px; } }
