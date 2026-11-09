@@ -15,7 +15,10 @@
         <h2 class="text-xl font-extrabold text-[var(--color-wine)]">NiniStory Admin</h2>
         <a href="{{ route('admin.dashboard') }}">داشبورد</a>
         <a href="{{ route('admin.categories.index') }}">دسته‌بندی‌ها</a>
-        <a href="{{ route('admin.products.index') }}">محصولات و موجودی</a>
+        <a href="{{ route('admin.banners.index') }}">مدیریت بنرها</a>
+        <a href="{{ route('admin.products.index') }}">محصولات</a>
+        <a href="{{ route('admin.inventory.index') }}">مدیریت موجودی</a>
+        <a href="{{ route('admin.inventory.reservations') }}">رزروهای موجودی</a>
         <form method="post" action="{{ route('admin.logout') }}">@csrf<button class="admin-button admin-button--muted">خروج</button></form>
     </aside>
     <main class="admin-main">

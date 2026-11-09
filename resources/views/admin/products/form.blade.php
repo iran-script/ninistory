@@ -1,26 +1,163 @@
 @extends('admin.layout')
+
 @section('content')
-<h1 class="mb-5 text-3xl font-extrabold">{{ $product->exists ? 'ویرایش محصول' : 'محصول تازه' }}</h1>
-<form class="admin-card admin-form" method="post" enctype="multipart/form-data" action="{{ $product->exists ? route('admin.products.update',$product) : route('admin.products.store') }}">
-@csrf @if($product->exists)@method('put')@endif
-<label>نام محصول<input required name="name" value="{{ old('name',$product->name) }}"></label>
-<label>Slug<input name="slug" dir="ltr" value="{{ old('slug',$product->slug) }}"></label>
-<label>SKU محصول<input name="sku" dir="ltr" value="{{ old('sku',$product->sku) }}"></label>
-<label>دسته‌بندی<select name="category_id"><option value="">انتخاب دسته</option>@foreach($categories as $category)<option value="{{ $category->id }}" @selected(old('category_id',$product->category_id)==$category->id)>{{ $category->name }}</option>@endforeach</select></label>
-<label>برند<input name="brand" value="{{ old('brand',$product->brand) }}"></label><label>جنس پارچه<input name="material" value="{{ old('material',$product->material) }}"></label>
-<label>راهنمای سن<input name="age_guidance" value="{{ old('age_guidance',$product->age_guidance) }}"></label><label>عنوان SEO<input name="meta_title" value="{{ old('meta_title',$product->meta_title) }}"></label>
-<label class="admin-span">توضیح کوتاه<input name="short_description" value="{{ old('short_description',$product->short_description) }}"></label>
-<label class="admin-span">توضیحات<textarea name="description" rows="4">{{ old('description',$product->description) }}</textarea></label>
-<label class="admin-span">روش نگهداری<textarea name="care_instructions" rows="3">{{ old('care_instructions',$product->care_instructions) }}</textarea></label>
-<label>توضیح SEO<input name="meta_description" value="{{ old('meta_description',$product->meta_description) }}"></label>
-<label>جدول سایز (JSON)<textarea name="size_chart" rows="3">{{ old('size_chart', $product->size_chart ? json_encode($product->size_chart, JSON_UNESCAPED_UNICODE) : '') }}</textarea></label>
-<label><span>انتشار</span><input type="checkbox" name="is_active" value="1" @checked(old('is_active',$product->is_active))></label><label><span>محصول ویژه</span><input type="checkbox" name="is_featured" value="1" @checked(old('is_featured',$product->is_featured))></label>
-<label class="admin-span">تصاویر گالری (حداکثر ۵ مگابایت برای هر تصویر)<input type="file" name="images[]" accept="image/jpeg,image/png,image/webp" multiple></label>
-@if($product->exists && $product->images->isNotEmpty())<div class="admin-span flex flex-wrap gap-3">@foreach($product->images as $image)<figure class="w-32"><img class="aspect-square w-full rounded-xl object-cover" src="{{ asset('storage/'.$image->path) }}" alt="{{ $image->alt_text }}"><figcaption class="mt-1 text-xs">{{ $image->caption }}</figcaption><button class="text-sm text-red-700" type="submit" form="delete-image-{{ $image->id }}" onclick="return confirm('تصویر حذف شود؟')">حذف تصویر</button></figure>@endforeach</div>@endif
-<div class="admin-span"><h2 class="mb-3 text-xl font-bold">گونه‌ها (قیمت و SKU؛ موجودی از مسیر ثبت تغییر موجودی)</h2><div class="admin-table-wrap"><table class="admin-variants"><thead><tr><th>رنگ</th><th>اندازه</th><th>SKU</th><th>قیمت تومان</th><th>قیمت قبل</th><th>HEX</th><th>فعال</th></tr></thead><tbody>
-@foreach(old('variants', $product->exists ? $product->variants->keyBy('id')->toArray() : [0 => []]) as $id => $variant)<tr><td><input name="variants[{{ $id }}][color_name]" required value="{{ data_get($variant,'color_name') }}"></td><td><input name="variants[{{ $id }}][size]" required value="{{ data_get($variant,'size') }}"></td><td><input name="variants[{{ $id }}][sku]" required dir="ltr" value="{{ data_get($variant,'sku') }}"></td><td><input name="variants[{{ $id }}][price_toman]" required type="number" min="1" value="{{ data_get($variant,'price_toman') }}"></td><td><input name="variants[{{ $id }}][compare_at_price_toman]" type="number" min="1" value="{{ data_get($variant,'compare_at_price_toman') }}"></td><td><input name="variants[{{ $id }}][color_hex]" dir="ltr" value="{{ data_get($variant,'color_hex') }}"></td><td><input name="variants[{{ $id }}][is_active]" value="1" type="checkbox" @checked(data_get($variant,'is_active',true))></td></tr>@endforeach
-</tbody></table></div><button type="button" class="mt-3 rounded-lg border px-3 py-2" onclick="const t=document.querySelector('#variant-template').innerHTML.replaceAll('__KEY__',crypto.randomUUID());document.querySelector('.admin-variants tbody').insertAdjacentHTML('beforeend',t)">افزودن گونه</button><template id="variant-template"><tr><td><input name="variants[__KEY__][color_name]" required></td><td><input name="variants[__KEY__][size]" required></td><td><input name="variants[__KEY__][sku]" required dir="ltr"></td><td><input name="variants[__KEY__][price_toman]" required type="number" min="1"></td><td><input name="variants[__KEY__][compare_at_price_toman]" type="number" min="1"></td><td><input name="variants[__KEY__][color_hex]" dir="ltr"></td><td><input name="variants[__KEY__][is_active]" value="1" type="checkbox" checked></td></tr></template>
-</div><div class="admin-span"><button class="admin-button">ذخیره محصول</button> <a class="admin-button admin-button--muted" href="{{ route('admin.products.index') }}">بازگشت</a></div></form>
-@if($product->exists)<section class="admin-card mt-5"><h2 class="mb-3 text-xl font-bold">تغییر موجودی</h2>@foreach($product->variants as $variant)<form class="mb-3 flex flex-wrap items-end gap-2" method="post" action="{{ route('admin.variants.stock',$variant) }}">@csrf @method('patch')<span class="min-w-36">{{ $variant->color_name }} / {{ $variant->size }} — فعلی: {{ $variant->stock_quantity }}</span><label>موجودی جدید<input required type="number" min="0" name="quantity" value="{{ $variant->stock_quantity }}"></label><label>دلیل<input required name="reason" minlength="3" maxlength="180"></label><button class="admin-button">ثبت تغییر</button></form>@endforeach</section>@endif
-@if($product->exists)@foreach($product->images as $image)<form id="delete-image-{{ $image->id }}" class="hidden" method="post" action="{{ route('admin.products.images.destroy',[$product,$image]) }}">@csrf @method('delete')</form>@endforeach@endif
+    <h1 class="mb-5 text-3xl font-extrabold">
+        {{ $product->exists ? 'ویرایش محصول' : 'محصول تازه' }}
+    </h1>
+
+    <form class="admin-card admin-form" method="post" enctype="multipart/form-data"
+          action="{{ $product->exists ? route('admin.products.update', $product) : route('admin.products.store') }}">
+        @csrf
+        @if ($product->exists)
+            @method('put')
+        @endif
+
+        <label>نام محصول
+            <input required name="name" value="{{ old('name', $product->name) }}">
+        </label>
+        <label>Slug
+            <input name="slug" dir="ltr" value="{{ old('slug', $product->slug) }}">
+        </label>
+        <label>SKU محصول
+            <input name="sku" dir="ltr" value="{{ old('sku', $product->sku) }}">
+        </label>
+        <label>دسته‌بندی
+            <select name="category_id">
+                <option value="">انتخاب دسته</option>
+                @foreach ($categories as $category)
+                    <option value="{{ $category->id }}" @selected(old('category_id', $product->category_id) == $category->id)>
+                        {{ $category->name }}
+                    </option>
+                @endforeach
+            </select>
+        </label>
+        <label>برند
+            <input name="brand" value="{{ old('brand', $product->brand) }}">
+        </label>
+        <label>جنس پارچه
+            <input name="material" value="{{ old('material', $product->material) }}">
+        </label>
+        <label>راهنمای سن
+            <input name="age_guidance" value="{{ old('age_guidance', $product->age_guidance) }}">
+        </label>
+        <label>عنوان SEO
+            <input name="meta_title" value="{{ old('meta_title', $product->meta_title) }}">
+        </label>
+        <label class="admin-span">توضیح کوتاه
+            <input name="short_description" value="{{ old('short_description', $product->short_description) }}">
+        </label>
+        <label class="admin-span">توضیحات
+            <textarea name="description" rows="4">{{ old('description', $product->description) }}</textarea>
+        </label>
+        <label class="admin-span">روش نگهداری
+            <textarea name="care_instructions" rows="3">{{ old('care_instructions', $product->care_instructions) }}</textarea>
+        </label>
+        <label>توضیح SEO
+            <input name="meta_description" value="{{ old('meta_description', $product->meta_description) }}">
+        </label>
+        <label>جدول سایز (JSON)
+            <textarea name="size_chart" rows="3">{{ old('size_chart', $product->size_chart ? json_encode($product->size_chart, JSON_UNESCAPED_UNICODE) : '') }}</textarea>
+        </label>
+        <label><span>انتشار</span>
+            <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $product->is_active))>
+        </label>
+        <label><span>محصول ویژه</span>
+            <input type="checkbox" name="is_featured" value="1" @checked(old('is_featured', $product->is_featured))>
+        </label>
+        <label class="admin-span">تصاویر گالری
+            <input type="file" name="images[]" accept="image/jpeg,image/png,image/webp" multiple>
+        </label>
+
+        @if ($product->exists && $product->images->isNotEmpty())
+            <div class="admin-span flex flex-wrap gap-3">
+                @foreach ($product->images as $image)
+                    <figure class="w-32">
+                        <img class="aspect-square w-full rounded-xl object-cover"
+                             src="{{ asset('storage/' . $image->path) }}" alt="{{ $image->alt_text }}">
+                        <figcaption class="mt-1 text-xs">{{ $image->caption }}</figcaption>
+                        <label class="text-xs">ترتیب
+                            <input type="number" min="0" max="65535"
+                                   name="image_order[{{ $image->id }}]" value="{{ $image->sort_order }}">
+                        </label>
+                        <button class="text-sm text-red-700" type="submit"
+                                form="delete-image-{{ $image->id }}"
+                                onclick="return confirm('تصویر حذف شود؟')">حذف تصویر</button>
+                    </figure>
+                @endforeach
+            </div>
+        @endif
+
+        <div class="admin-span">
+            <h2 class="mb-3 text-xl font-bold">گونه‌ها</h2>
+            <div class="admin-table-wrap">
+                <table class="admin-variants">
+                    <thead><tr><th>رنگ</th><th>اندازه</th><th>SKU</th><th>قیمت تومان</th><th>قیمت قبل</th><th>HEX</th><th>فعال</th></tr></thead>
+                    <tbody>
+                        @foreach (old('variants', $product->exists ? $product->variants->keyBy('id')->toArray() : [0 => []]) as $id => $variant)
+                            <tr>
+                                <td><input name="variants[{{ $id }}][color_name]" required value="{{ data_get($variant, 'color_name') }}"></td>
+                                <td><input name="variants[{{ $id }}][size]" required value="{{ data_get($variant, 'size') }}"></td>
+                                <td><input name="variants[{{ $id }}][sku]" required dir="ltr" value="{{ data_get($variant, 'sku') }}"></td>
+                                <td><input name="variants[{{ $id }}][price_toman]" required type="number" min="1" value="{{ data_get($variant, 'price_toman') }}"></td>
+                                <td><input name="variants[{{ $id }}][compare_at_price_toman]" type="number" min="1" value="{{ data_get($variant, 'compare_at_price_toman') }}"></td>
+                                <td><input name="variants[{{ $id }}][color_hex]" dir="ltr" value="{{ data_get($variant, 'color_hex') }}"></td>
+                                <td><input name="variants[{{ $id }}][is_active]" value="1" type="checkbox" @checked(data_get($variant, 'is_active', true))></td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="mt-3 rounded-lg border px-3 py-2"
+                    onclick="const t=document.querySelector('#variant-template').innerHTML.replaceAll('__KEY__',crypto.randomUUID());document.querySelector('.admin-variants tbody').insertAdjacentHTML('beforeend',t)">
+                افزودن گونه
+            </button>
+            <template id="variant-template">
+                <tr>
+                    <td><input name="variants[__KEY__][color_name]" required></td>
+                    <td><input name="variants[__KEY__][size]" required></td>
+                    <td><input name="variants[__KEY__][sku]" required dir="ltr"></td>
+                    <td><input name="variants[__KEY__][price_toman]" required type="number" min="1"></td>
+                    <td><input name="variants[__KEY__][compare_at_price_toman]" type="number" min="1"></td>
+                    <td><input name="variants[__KEY__][color_hex]" dir="ltr"></td>
+                    <td><input name="variants[__KEY__][is_active]" value="1" type="checkbox" checked></td>
+                </tr>
+            </template>
+        </div>
+
+        <div class="admin-span">
+            <button class="admin-button">ذخیره محصول</button>
+            <a class="admin-button admin-button--muted" href="{{ route('admin.products.index') }}">بازگشت</a>
+        </div>
+    </form>
+
+    @if ($product->exists)
+        <section class="admin-card mt-5">
+            <h2 class="mb-3 text-xl font-bold">تغییر موجودی</h2>
+            @foreach ($product->variants as $variant)
+                <form class="mb-3 flex flex-wrap items-end gap-2" method="post"
+                      action="{{ route('admin.variants.stock', $variant) }}">
+                    @csrf
+                    @method('patch')
+                    <span class="min-w-36">{{ $variant->color_name }} / {{ $variant->size }} — فعلی: {{ $variant->stock_quantity }}</span>
+                    <label>موجودی جدید
+                        <input required type="number" min="0" name="quantity" value="{{ $variant->stock_quantity }}">
+                    </label>
+                    <label>دلیل
+                        <input required name="reason" minlength="3" maxlength="180">
+                    </label>
+                    <button class="admin-button">ثبت تغییر</button>
+                </form>
+            @endforeach
+        </section>
+    @endif
+
+    @if ($product->exists)
+        @foreach ($product->images as $image)
+            <form id="delete-image-{{ $image->id }}" class="hidden" method="post"
+                  action="{{ route('admin.products.images.destroy', [$product, $image]) }}">
+                @csrf
+                @method('delete')
+            </form>
+        @endforeach
+    @endif
 @endsection

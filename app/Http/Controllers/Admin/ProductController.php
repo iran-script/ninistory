@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Services\InventoryService;
 
 class ProductController extends Controller
 {
@@ -33,7 +34,11 @@ class ProductController extends Controller
     public function update(Request $request, Product $product)
     {
         $data = $this->validateProduct($request, $product);
-        DB::transaction(function () use ($request, $data, $product) { $product->update($data); $this->saveVariants($request, $product); });
+        DB::transaction(function () use ($request, $data, $product) {
+            $product->update($data);
+            $this->saveVariants($request, $product);
+            $this->saveImageOrdering($request, $product);
+        });
         $this->saveImages($request, $product);
         return back()->with('status', 'تغییرات محصول ذخیره شد.');
     }
@@ -48,26 +53,34 @@ class ProductController extends Controller
     public function destroyImage(Product $product, ProductImage $image)
     {
         abort_unless($image->product_id === $product->id, 404);
-        DB::transaction(function () use ($image) { Storage::disk('public')->delete($image->path); $image->delete(); });
+        DB::transaction(function () use ($image, $product) {
+            $wasCover = $image->is_cover;
+            Storage::disk('public')->delete($image->path);
+            $image->delete();
+            if ($wasCover && ($replacement = $product->images()->first())) {
+                $replacement->update(['is_cover' => true]);
+            }
+        });
         return back()->with('status', 'تصویر حذف شد.');
     }
 
     public function stock(Request $request, ProductVariant $variant)
     {
         $data = $request->validate(['quantity' => ['required', 'integer', 'min:0', 'max:1000000'], 'reason' => ['required', 'string', 'min:3', 'max:180']]);
-        DB::transaction(function () use ($request, $variant, $data) {
-            $locked = ProductVariant::lockForUpdate()->findOrFail($variant->id);
-            $before = $locked->stock_quantity; $after = (int) $data['quantity'];
-            $locked->update(['stock_quantity' => $after]);
-            if ($before !== $after) $locked->inventoryMovements()->create(['user_id' => $request->user()->id, 'quantity_delta' => $after - $before, 'quantity_before' => $before, 'quantity_after' => $after, 'reason' => 'admin_adjustment', 'reference' => $data['reason']]);
-        });
+        app(InventoryService::class)->setPhysicalStock($variant, (int) $data['quantity'], $data['reason'], $request->user());
         return back()->with('status', 'موجودی و سابقه‌ی تغییر ثبت شد.');
     }
 
     private function validateProduct(Request $request, ?Product $product = null): array
     {
         $data = $request->validate(['category_id' => ['nullable', 'integer', 'exists:categories,id'], 'name' => ['required', 'string', 'max:180'], 'slug' => ['nullable', 'string', 'max:190', 'alpha_dash:ascii', 'unique:products,slug,'.($product?->id ?? 'NULL')], 'sku' => ['nullable', 'string', 'max:100', 'unique:products,sku,'.($product?->id ?? 'NULL')], 'short_description' => ['nullable', 'string', 'max:500'], 'description' => ['nullable', 'string', 'max:10000'], 'brand' => ['nullable', 'string', 'max:160'], 'material' => ['nullable', 'string', 'max:160'], 'care_instructions' => ['nullable', 'string', 'max:5000'], 'age_guidance' => ['nullable', 'string', 'max:160'], 'size_chart' => ['nullable', 'string', 'max:10000'], 'meta_title' => ['nullable', 'string', 'max:255'], 'meta_description' => ['nullable', 'string', 'max:320'], 'is_active' => ['sometimes', 'boolean'], 'is_featured' => ['sometimes', 'boolean']]);
-        if (($data['is_active'] ?? false) && count($request->input('variants', [])) < 1) $request->validate(['variants' => ['required', 'array', 'min:1']]);
+        if (($data['is_active'] ?? false)) {
+            $variants = $request->input('variants', []);
+            $request->validate(['variants' => ['required', 'array', 'min:1']]);
+            if (! collect($variants)->contains(fn ($variant) => filter_var($variant['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN))) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['variants' => 'Published products require at least one active variant.']);
+            }
+        }
         $data['slug'] = $data['slug'] ?: (Str::slug($data['name']) ?: 'product-'.Str::lower(Str::random(10)));
         $data['is_active'] = $request->boolean('is_active'); $data['is_featured'] = $request->boolean('is_featured');
         $data['size_chart'] = filled($data['size_chart'] ?? null) ? json_decode($data['size_chart'], true, 512, JSON_THROW_ON_ERROR) : null;
@@ -88,10 +101,25 @@ class ProductController extends Controller
 
     private function saveImages(Request $request, Product $product): void
     {
+        $request->validate(['images' => ['sometimes', 'array', 'max:6']]);
         foreach ($request->file('images', []) as $index => $file) {
             $validated = validator(['image' => $file], ['image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']])->validate();
             $path = $validated['image']->store('products/'.$product->id, 'public');
             $product->images()->create(['path' => $path, 'alt_text' => $request->input("image_alt.$index", $product->name), 'caption' => $request->input("image_caption.$index"), 'sort_order' => $product->images()->count(), 'is_cover' => $product->images()->doesntExist()]);
+        }
+    }
+
+    private function saveImageOrdering(Request $request, Product $product): void
+    {
+        $order = $request->input('image_order', []);
+        if (! is_array($order) || $order === []) return;
+
+        $validIds = $product->images()->pluck('id')->map(fn ($id) => (string) $id)->all();
+        validator(['image_order' => $order], ['image_order' => ['array'], 'image_order.*' => ['integer', 'min:0', 'max:65535']])->validate();
+        abort_unless(count(array_diff(array_keys($order), $validIds)) === 0, 422);
+
+        foreach ($order as $id => $sortOrder) {
+            $product->images()->whereKey($id)->update(['sort_order' => (int) $sortOrder]);
         }
     }
 }

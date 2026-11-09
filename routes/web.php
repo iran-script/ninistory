@@ -6,6 +6,8 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\CategoryController as AdminCategoryController;
 use App\Http\Controllers\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Admin\BannerController as AdminBannerController;
+use App\Http\Controllers\Admin\InventoryController as AdminInventoryController;
 
 Route::get('/', [StorefrontController::class, 'home'])->name('home');
 Route::get('/products', [StorefrontController::class, 'index'])->name('products.index');
@@ -14,9 +16,14 @@ Route::get('/cart', [StorefrontController::class, 'cart'])->name('cart');
 Route::post('/cart', [StorefrontController::class, 'addToCart'])->name('cart.add');
 Route::patch('/cart/{variant}', [StorefrontController::class, 'updateCart'])->name('cart.update');
 Route::delete('/cart/{variant}', [StorefrontController::class, 'removeFromCart'])->name('cart.remove');
-Route::get('/checkout', fn () => view('store.checkout', ['items' => collect(session('cart', []))->map(fn ($qty, $id) => ['variant' => \App\Models\ProductVariant::with('product')->find($id), 'quantity' => $qty])->filter()]))->name('checkout');
+Route::get('/checkout', function () { $key = session('checkout_key'); if (! $key) { $key = (string) \Illuminate\Support\Str::uuid(); session(['checkout_key' => $key]); } return view('store.checkout', ['checkoutKey' => $key, 'items' => collect(session('cart', []))->map(fn ($qty, $id) => ['variant' => \App\Models\ProductVariant::with('product')->find($id), 'quantity' => $qty])->filter()]); })->name('checkout');
 Route::post('/checkout', [StorefrontController::class, 'checkout'])->name('checkout.store');
-Route::get('/checkout/complete/{order:number}', fn (\App\Models\Order $order) => view('store.checkout-complete', compact('order')))->name('checkout.complete');
+Route::get('/checkout/complete/{order:number}', function (\Illuminate\Http\Request $request, \App\Models\Order $order) {
+    $owned = $request->user()?->id !== null && $order->user_id === $request->user()->id;
+    $guestOwned = session('completed_order_number') === $order->number;
+    abort_unless($owned || $guestOwned, 404);
+    return view('store.checkout-complete', compact('order'));
+})->name('checkout.complete');
 Route::get('/_local-preview/{path}', function (string $path) {
     abort_unless(app()->environment(['local', 'testing']), 404);
     abort_unless(str_starts_with($path, 'images/'), 404);
@@ -35,7 +42,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('logout', [AdminAuthController::class, 'destroy'])->name('logout');
         Route::get('/', AdminDashboardController::class)->name('dashboard');
         Route::resource('categories', AdminCategoryController::class)->except(['show']);
+        Route::resource('banners', AdminBannerController::class)->except(['show']);
         Route::resource('products', AdminProductController::class)->except(['show']);
+        Route::get('inventory', [AdminInventoryController::class, 'index'])->name('inventory.index');
+        Route::post('inventory/{variant}/receive', [AdminInventoryController::class, 'receive'])->name('inventory.receive');
+        Route::get('inventory/{variant}/movements', [AdminInventoryController::class, 'movements'])->name('inventory.movements');
+        Route::get('inventory-reservations', [AdminInventoryController::class, 'reservations'])->name('inventory.reservations');
         Route::delete('products/{product}/images/{image}', [AdminProductController::class, 'destroyImage'])->name('products.images.destroy');
         Route::patch('variants/{variant}/stock', [AdminProductController::class, 'stock'])->name('variants.stock');
     });

@@ -7,6 +7,14 @@
         <h1 class="mt-3 text-2xl font-extrabold md:text-3xl">لباس‌های کودک</h1>
         <p class="mt-2">انتخاب‌های لطیف برای قصه‌های هر روز</p>
     </div>
+    <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" aria-label="دسته‌بندی‌های تصویری">
+        @foreach ($categories as $category)
+            <a class="relative h-24 overflow-hidden rounded-2xl bg-[#fce9ed]" href="{{ route('products.index', ['category' => $category->id]) }}">
+                <img class="h-full w-full object-cover" src="{{ $categoryImages[$category->slug] ?? asset('images/ninistory/banner-collection.webp') }}" alt="{{ $category->name }}" loading="lazy">
+                <span class="absolute bottom-2 start-2 rounded-lg bg-white/85 px-3 py-1 text-sm font-bold">{{ $category->name }}</span>
+            </a>
+        @endforeach
+    </div>
     <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
         <form id="filters" class="grid grid-cols-2 gap-3 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm lg:sticky lg:top-44 lg:w-[260px] lg:shrink-0 lg:grid-cols-1 lg:gap-5 lg:p-5">
             <h2 class="col-span-2 text-lg font-bold lg:col-span-1">فیلتر محصولات</h2>

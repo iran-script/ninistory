@@ -8,13 +8,16 @@
         default => null,
     };
     $previewOnly = app()->environment(['local', 'testing']);
-    $usingPreview = $previewOnly && $product->images->isEmpty() && $previewKey;
+    $storedImage = $product->images->first(fn ($image) => \Illuminate\Support\Facades\Storage::disk('public')->exists($image->path));
+    $previewPath = $previewKey ? 'images/products/'.$previewKey.'.jpg' : null;
+    $usingPreview = $previewOnly && ! $storedImage && $previewPath
+        && is_file(storage_path('app/demo-preview/'.$previewPath));
 @endphp
 <article class="product-card">
     <a href="{{ route('products.show', $product) }}" class="product-card__link">
         <div class="product-card__image">
-            @if($product->images->isNotEmpty())
-                <img src="{{ asset('storage/'.$product->images->first()->path) }}" alt="{{ $product->images->first()->alt_text }}" loading="lazy">
+            @if($storedImage)
+                <img src="{{ asset('storage/'.$storedImage->path) }}" alt="{{ $storedImage->alt_text }}" loading="lazy">
             @elseif($usingPreview)
                 <img src="{{ route('preview.asset', ['path'=>'images/products/'.$previewKey.'.jpg']) }}" alt="تصویر نمایشی محصول {{ $product->name }}؛ عکس نمونه و نه تصویر کالای واقعی" loading="lazy">
                 <span class="preview-label">تصویر نمایشی</span>

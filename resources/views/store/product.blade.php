@@ -2,11 +2,13 @@
 @section('title', $product->name.' | نینی‌استوری')
 @section('content')
 @php($previewKey = str_contains($product->slug, 'sunny') ? 'floral-dress' : (str_contains($product->slug, 'cotton') ? 'teddy-sweater' : 'pink-coat'))
-@php($previewOnly = app()->environment(['local', 'testing']) && $product->images->isEmpty())
+@php($storedImage = $product->images->first(fn ($image) => \Illuminate\Support\Facades\Storage::disk('public')->exists($image->path)))
+@php($previewPath = 'images/products/'.$previewKey.'.jpg')
+@php($previewOnly = app()->environment(['local', 'testing']) && ! $storedImage && is_file(storage_path('app/demo-preview/'.$previewPath)))
 <section class="mx-auto grid max-w-[1440px] gap-6 px-4 py-6 md:grid-cols-[1.05fr_.95fr] md:gap-12 md:px-8 md:py-10">
     <div class="min-w-0">
         <div class="relative aspect-[4/4.2] overflow-hidden rounded-3xl bg-[#f8eeeb] md:aspect-[.95/1]">
-            @if($product->images->isNotEmpty())<img class="h-full w-full object-cover" src="{{ asset('storage/'.$product->images->first()->path) }}" alt="{{ $product->images->first()->alt_text }}">
+            @if($storedImage)<img class="h-full w-full object-cover" src="{{ asset('storage/'.$storedImage->path) }}" alt="{{ $storedImage->alt_text }}">
             @elseif($previewOnly)<img class="h-full w-full object-cover" src="{{ route('preview.asset', ['path'=>'images/products/'.$previewKey.'.jpg']) }}" alt="تصویر نمایشی؛ با کالای واقعی تطبیق ندارد"><span class="absolute bottom-3 start-3 rounded-full bg-white/90 px-3 py-1 text-xs">تصویر پیش‌نمایش محلی</span>
             @else<div class="grid h-full place-items-center text-sm text-[var(--color-muted)]">تصویر محصول به‌زودی</div>@endif
         </div>
