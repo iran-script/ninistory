@@ -26,7 +26,17 @@ class StorefrontController extends Controller
         $products = Product::with(['variants', 'images'])->where('is_active', true)
             ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->string('q').'%'))
             ->when($request->integer('category'), fn ($q, $id) => $q->where('category_id', $id))
-            ->when($request->boolean('available'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('stock_quantity', '>', 0)))
+            ->when($request->filled('min_price') || $request->filled('max_price'), function ($q) use ($request) {
+                $q->whereHas('variants', function ($variants) use ($request) {
+                    $variants->where('is_active', true)
+                        ->when($request->filled('min_price'), fn ($v) => $v->where('price_toman', '>=', max(0, (int) $request->input('min_price'))))
+                        ->when($request->filled('max_price'), fn ($v) => $v->where('price_toman', '<=', max(0, (int) $request->input('max_price'))));
+                });
+            })
+            ->when($request->filled('size'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->where('size', $request->string('size'))))
+            ->when($request->filled('color'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->where('color_name', $request->string('color'))))
+            ->when($request->filled('material'), fn ($q) => $q->where('material', $request->string('material')))
+            ->when($request->boolean('available'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->where('stock_quantity', '>', 0)))
             ->when($request->input('sort') === 'price_asc', fn ($q) => $q->withMin('variants', 'price_toman')->orderBy('variants_min_price_toman'))
             ->when($request->input('sort') === 'price_desc', fn ($q) => $q->withMax('variants', 'price_toman')->orderByDesc('variants_max_price_toman'))
             ->when(!in_array($request->input('sort'), ['price_asc','price_desc'], true), fn ($q) => $q->latest())

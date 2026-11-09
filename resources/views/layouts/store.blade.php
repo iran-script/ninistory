@@ -1,24 +1,71 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}"><title>@yield('title', 'نینیاستوری | قصه‌ی خوش‌پوشی')</title>
-    <meta name="description" content="لباس‌های لطیف و دوست‌داشتنی برای کوچولوها، در نینی‌استوری.">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>@yield('title', 'نینی‌استوری | قصه‌ی خوش‌پوشی')</title>
+    <meta name="description" content="لباس‌های لطیف و دوست‌داشتنی برای کوچولوها؛ انتخابی شیرین برای روزهای کودکی.">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen font-sans antialiased">
-<div class="hidden items-center justify-between bg-[#fdebf0] px-6 py-2 text-xs font-medium text-[var(--color-brown)] md:flex"><span>به خانواده نینی‌استوری خوش آمدید <span class="text-[var(--color-action)]">♥</span></span><span>ارسال به سراسر ایران　 ·　 ضمانت اصالت کالا　 ·　 ۷ روز امکان بازگشت</span></div>
-<header class="sticky top-0 z-20 border-b border-[var(--color-border)] bg-white/95 backdrop-blur">
-  <div class="mx-auto hidden max-w-[1500px] grid-cols-[auto_minmax(320px,1fr)_auto] items-center gap-8 px-6 py-3 md:grid">
-    <div class="flex items-center gap-3"><a href="{{ route('products.index') }}" class="rounded-xl border border-[var(--color-border)] px-4 py-3 text-sm">ورود / ثبت‌نام　♙</a><a href="{{ route('products.index') }}" class="rounded-xl border border-[var(--color-border)] px-4 py-3 text-sm">علاقه‌مندی‌ها　♡</a><a href="{{ route('cart') }}" class="relative rounded-xl border border-[var(--color-border)] px-4 py-3 text-sm">سبد خرید　♧<span class="absolute -top-2 end-2 rounded-full bg-[var(--color-action)] px-2 text-xs text-white">{{ count(session('cart', [])) }}</span></a></div>
-    <form action="{{ route('products.index') }}" class="mx-auto w-full max-w-[620px]"><label class="sr-only" for="search">جست‌وجوی لباس</label><input id="search" name="q" value="{{ request('q') }}" placeholder="جست‌وجوی لباس، دسته‌بندی یا برند..." class="w-full rounded-full border border-[var(--color-border)] bg-[#faf8f8] px-6 py-3 text-sm"></form>
-    <a href="{{ route('home') }}" aria-label="صفحه اصلی نینی‌استوری" class="block h-[76px] w-[210px] overflow-hidden"><img src="{{ asset('brand-logo.png') }}" alt="نینی‌استوری" class="h-[210px] w-[210px] max-w-none -translate-y-[62px] object-cover"></a>
-  </div>
-  <div class="flex items-center justify-between px-4 py-2 md:hidden"><button type="button" class="rounded-xl p-2" aria-label="رفتن به جست‌وجو" onclick="document.getElementById('mobile-search').focus()"><svg aria-hidden="true" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><a href="{{ route('home') }}" aria-label="صفحه اصلی نینی‌استوری" class="block h-14 w-40 overflow-hidden"><img src="{{ asset('brand-logo.png') }}" alt="نینی‌استوری" class="h-40 w-40 max-w-none -translate-y-[46px] object-cover"></a><div class="flex gap-3"><a href="{{ route('products.index') }}" aria-label="علاقه‌مندی‌ها" class="text-2xl">♡</a><a href="{{ route('cart') }}" aria-label="سبد خرید" class="text-xl">♧</a></div></div>
-  <form action="{{ route('products.index') }}" class="px-4 pb-3 md:hidden"><label class="sr-only" for="mobile-search">جست‌وجوی لباس</label><div class="relative"><input id="mobile-search" name="q" value="{{ request('q') }}" placeholder="دنبال چه لباسی برای کوچولوت می‌گردی؟" class="w-full rounded-full border border-[var(--color-border)] bg-[#fcf9fa] px-5 py-3 text-sm"><span class="pointer-events-none absolute start-4 top-2.5 text-xl">⌕</span></div></form>
-  <nav class="hidden items-center justify-center gap-8 border-t border-[#f3edf0] px-6 py-2.5 text-sm font-semibold lg:flex" aria-label="دسته‌بندی‌ها"><a class="rounded-lg bg-[var(--color-action)] px-5 py-2 text-white" href="{{ route('home') }}">خانه</a><a href="{{ route('products.index', ['category'=>2]) }}">دخترانه　♙</a><a href="{{ route('products.index', ['category'=>3]) }}">پسرانه　♧</a><a href="{{ route('products.index', ['category'=>1]) }}">نوزادی</a><a href="{{ route('products.index') }}">مجموعه‌های ویژه　☆</a><a href="{{ route('products.index') }}">جدیدترین‌ها</a><a href="{{ route('products.index') }}">تخفیف‌ها</a><a href="{{ route('products.index') }}#club">باشگاه مشتریان</a><a href="{{ route('products.index') }}">Magic Fit</a></nav>
-</header>
-<main class="pb-20 md:pb-0">@yield('content')</main>
-<nav class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--color-border)] bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 text-center text-xs shadow-lg md:hidden" aria-label="ناوبری پایین"><a class="flex flex-col items-center gap-1 py-1" href="{{ route('home') }}"><span aria-hidden="true">⌂</span>خانه</a><a class="flex flex-col items-center gap-1 py-1" href="{{ route('products.index') }}"><span aria-hidden="true">▦</span>لباس‌ها</a><a class="flex flex-col items-center gap-1 py-1" href="{{ route('cart') }}"><span aria-hidden="true">▤</span>سبد ({{ count(session('cart', [])) }})</a><a class="flex flex-col items-center gap-1 py-1" href="{{ route('home') }}#club"><span aria-hidden="true">♡</span>باشگاه</a></nav>
-<footer class="mt-20 border-t border-[var(--color-border)] bg-white"><div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-10 text-sm md:flex-row md:justify-between"><p>نینی‌استوری؛ قصه‌ی کوچولوی خوش‌پوش تو.</p><p>پشتیبانی: هر روز، ۹ تا ۱۷</p><p>© نینی‌استوری</p></div></footer>
-</body></html>
+    <div class="announcement-bar"><span>به خانواده‌ی نینی‌استوری خوش آمدید <span class="announcement-heart" aria-hidden="true">♥</span></span><span>ارسال به سراسر ایران <i>•</i> ضمانت اصالت کالا <i>•</i> ۷ روز امکان بازگشت</span></div>
+    <header class="site-header">
+        <div class="desktop-header">
+            <div class="header-actions">
+                <a href="{{ route('products.index') }}">ورود / ثبت‌نام <span aria-hidden="true">♙</span></a>
+                <a href="{{ route('products.index') }}">علاقه‌مندی‌ها <span aria-hidden="true">♡</span></a>
+                <a class="cart-link" href="{{ route('cart') }}">سبد خرید <span aria-hidden="true">♧</span><b>{{ count(session('cart', [])) }}</b></a>
+            </div>
+            <form action="{{ route('products.index') }}" class="header-search">
+                <label class="sr-only" for="desktop-search">جست‌وجوی لباس</label>
+                <input id="desktop-search" name="q" value="{{ request('q') }}" placeholder="جست‌وجوی لباس، دسته‌بندی یا برند...">
+                <button type="submit" aria-label="جست‌وجو">⌕</button>
+            </form>
+            <a href="{{ route('home') }}" class="brand" aria-label="نینی‌استوری، صفحه‌ی اصلی">
+                <img src="{{ asset('brand-logo.png') }}" alt="نینی‌استوری">
+            </a>
+        </div>
+        <div class="mobile-header">
+            <button type="button" class="icon-button" aria-label="جست‌وجو" onclick="document.getElementById('mobile-search').focus()"><span aria-hidden="true">⌕</span></button>
+            <a href="{{ route('home') }}" class="brand brand--mobile"><img src="{{ asset('brand-logo.png') }}" alt="نینی‌استوری"></a>
+            <div class="mobile-header__actions"><a href="{{ route('products.index') }}" aria-label="علاقه‌مندی‌ها">♡</a><a href="{{ route('cart') }}" aria-label="سبد خرید">♧</a></div>
+        </div>
+        <form action="{{ route('products.index') }}" class="mobile-search">
+            <label class="sr-only" for="mobile-search">جست‌وجوی لباس</label>
+            <input id="mobile-search" name="q" value="{{ request('q') }}" placeholder="دنبال چه لباسی برای کوچولوت می‌گردی؟">
+            <button type="submit" aria-label="جست‌وجو">⌕</button>
+        </form>
+        <nav class="main-nav" aria-label="دسته‌بندی‌ها">
+            <a class="main-nav__active" href="{{ route('home') }}"><span aria-hidden="true">⌂</span> خانه</a>
+            <a href="{{ route('products.index', ['category' => 2]) }}">دخترانه <span aria-hidden="true">♧</span></a>
+            <a href="{{ route('products.index', ['category' => 3]) }}">پسرانه <span aria-hidden="true">♧</span></a>
+            <a href="{{ route('products.index', ['category' => 1]) }}">نوزادی <span aria-hidden="true">♡</span></a>
+            <a href="{{ route('products.index') }}">مجموعه‌های ویژه <span aria-hidden="true">☆</span></a>
+            <a href="{{ route('products.index') }}">جدیدترین‌ها <span aria-hidden="true">✦</span></a>
+            <a href="{{ route('products.index') }}">تخفیف‌ها <span aria-hidden="true">♧</span></a>
+            <a href="{{ route('home') }}#club">باشگاه نینی‌استوری <span aria-hidden="true">♧</span></a>
+            <a href="{{ route('products.index') }}">Magic Fit <span aria-hidden="true">✧</span></a>
+        </nav>
+    </header>
+
+    <main class="pb-20 md:pb-0">@yield('content')</main>
+
+    <nav class="mobile-bottom-nav" aria-label="ناوبری پایین صفحه">
+        <a class="mobile-bottom-nav__active" href="{{ route('home') }}"><span aria-hidden="true">⌂</span>خانه</a>
+        <a href="{{ route('products.index') }}"><span aria-hidden="true">▦</span>دسته‌بندی</a>
+        <a href="{{ route('cart') }}"><span aria-hidden="true">♧</span>سبد خرید</a>
+        <a href="{{ route('home') }}#club"><span aria-hidden="true">♧</span>باشگاه</a>
+        <a href="{{ route('products.index') }}"><span aria-hidden="true">♙</span>پروفایل</a>
+    </nav>
+
+    <footer class="site-footer">
+        <div class="site-footer__inner">
+            <div><a href="{{ route('home') }}" class="footer-brand">نینی‌استوری</a><p>قصه‌ی خوش‌پوشی کوچولوها؛ لباس‌های لطیف و دوست‌داشتنی برای روزهای کودکی.</p></div>
+            <div><strong>راهنمای خرید</strong><a href="{{ route('products.index') }}">همه‌ی محصولات</a><a href="{{ route('cart') }}">سبد خرید</a></div>
+            <div><strong>پشتیبانی</strong><span>هر روز، ۹ تا ۱۸</span><span>ارسال به سراسر ایران</span></div>
+        </div>
+        <div class="site-footer__copyright">© نینی‌استوری</div>
+    </footer>
+</body>
+</html>

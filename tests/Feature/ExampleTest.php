@@ -8,14 +8,14 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     use RefreshDatabase;
-    /**
-     * A basic test example.
-     */
-    public function test_the_application_returns_a_successful_response(): void
-    {
-        $response = $this->get('/');
 
-        $response->assertStatus(200);
-        $response->assertSee('هر کوچولو');
+    public function test_the_homepage_renders_the_storefront_sections(): void
+    {
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('نینی‌استوری')
+            ->assertSee('انتخاب‌های محبوب')
+            ->assertSee('پرفروش‌ها')
+            ->assertSee('راهنمای اندازه');
     }
 }
