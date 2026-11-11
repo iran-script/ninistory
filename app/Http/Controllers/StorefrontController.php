@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use App\Models\Order;
 use App\Exceptions\InsufficientStockException;
 use App\Services\InventoryReservationService;
+use App\Services\{ShippingAddressService, ShippingRateService};
 
 class StorefrontController extends Controller
 {
@@ -51,7 +52,7 @@ class StorefrontController extends Controller
                 ]),
             ],
             'demoMediaUrl' => asset('images/ninistory/demo-dress-pink.webp'),
-            'featured' => Product::with(['variants', 'images'])->where('is_active', true)->where('is_featured', true)->latest()->take(4)->get(),
+            'featured' => Product::with(['variants', 'images'])->where('is_active', true)->where('is_featured', true)->whereHas('variants', fn ($q) => $q->where('is_active', true))->latest()->take(4)->get(),
         ]);
     }
 
@@ -87,7 +88,7 @@ class StorefrontController extends Controller
 
     public function index(Request $request): View
     {
-        $products = Product::with(['variants', 'images'])->where('is_active', true)
+        $products = Product::with(['variants', 'images'])->where('is_active', true)->whereHas('variants', fn ($q) => $q->where('is_active', true))
             ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->string('q').'%'))
             ->when($request->integer('category'), fn ($q, $id) => $q->where('category_id', $id))
             ->when($request->filled('min_price') || $request->filled('max_price'), function ($q) use ($request) {
@@ -116,7 +117,7 @@ class StorefrontController extends Controller
 
     public function show(Product $product): View
     {
-        abort_unless($product->is_active, 404);
+        abort_unless($product->is_active && $product->variants()->where('is_active', true)->exists(), 404);
         return view('store.product', ['product' => $product->load(['variants', 'images', 'category'])]);
     }
 
@@ -156,7 +157,8 @@ class StorefrontController extends Controller
 
     public function checkout(Request $request): RedirectResponse
     {
-        $data = $request->validate(['recipient_name' => ['required', 'string', 'max:160'], 'phone' => ['required', 'string', 'max:20'], 'address' => ['required', 'string', 'max:1000'], 'postal_code' => ['required', 'string', 'max:20'], 'checkout_key' => ['nullable', 'string', 'max:100']]);
+        $data = $request->validate(['recipient_name' => ['required', 'string', 'max:160'], 'phone' => ['required', 'string', 'max:20'], 'address' => ['required', 'string', 'max:1000'], 'building' => ['nullable', 'string', 'max:120'], 'postal_code' => ['required', 'string', 'max:20'], 'province_code' => ['required', 'string', 'max:20'], 'city_code' => ['required', 'string', 'max:40'], 'shipping_method' => ['required', 'string', 'max:40'], 'checkout_key' => ['nullable', 'string', 'max:100']]);
+        $data = app(ShippingAddressService::class)->validate($data);
         $data['checkout_key'] = ($data['checkout_key'] ?? null) ?: session('checkout_key') ?: (string) Str::uuid();
         $cart = session('cart', []);
         if (!$cart) return back()->withErrors(['cart' => 'سبد خرید خالی است.']);
@@ -166,9 +168,9 @@ class StorefrontController extends Controller
             if ($existing) return $existing;
             $variants = ProductVariant::with('product')->whereIn('id', array_keys($cart))->where('is_active', true)->whereHas('product', fn ($q) => $q->where('is_active', true))->lockForUpdate()->get()->keyBy('id');
             abort_if($variants->count() !== count($cart), 422, 'یکی از کالاها دیگر در دسترس نیست.');
-            $total = 0;
+            $total = 0; $weight = 0;
             foreach ($cart as $id => $qty) { $v = $variants[$id]; abort_if($qty > $v->available_quantity, 422, 'موجودی کافی نیست.'); $total += $v->price_toman * $qty; }
-            $order = Order::create(['number' => (string) Str::ulid(), 'checkout_key' => $data['checkout_key'], 'recipient_name' => $data['recipient_name'], 'phone' => $data['phone'], 'address' => $data['address'], 'postal_code' => $data['postal_code'], 'currency' => 'IRR', 'subtotal_toman' => $total, 'status' => Order::PENDING_PAYMENT]);
+            $order = Order::create(['number' => (string) Str::ulid(), 'checkout_key' => $data['checkout_key'], 'guest_access_token' => hash('sha512', Str::random(64)), 'user_id' => auth()->id(), 'recipient_name' => $data['recipient_name'], 'phone' => $data['phone'], 'address' => $data['address'], 'postal_code' => $data['postal_code'], 'currency' => 'IRR', 'subtotal_toman' => $total, 'status' => Order::PENDING_PAYMENT, 'payment_status' => Order::PAYMENT_PENDING, 'fulfillment_status' => Order::FULFILLMENT_AWAITING, 'shipment_status' => Order::SHIPMENT_NOT_SHIPPED]);
             foreach ($cart as $id => $qty) { $v = $variants[$id]; $order->items()->create(['product_variant_id' => $v->id, 'sku' => $v->sku, 'product_name' => $v->product->name, 'size' => $v->size, 'color_name' => $v->color_name, 'unit_price_toman' => $v->price_toman, 'quantity' => $qty, 'line_total_toman' => $v->price_toman * $qty]); }
             app(InventoryReservationService::class)->reserveOrder($order, collect($cart)->map(fn ($qty, $id) => ['variant' => $variants[$id], 'quantity' => $qty]), $data['checkout_key']);
             return $order;

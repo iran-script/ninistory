@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('inventory:expire-reservations')->everyMinute();
+Schedule::command('payments:expire')->everyMinute();
+Schedule::command('payments:reconcile')->hourly()->withoutOverlapping();

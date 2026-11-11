@@ -58,7 +58,7 @@ class InventoryReservationService
         $count = 0;
         StockReservation::query()->where('status', StockReservation::ACTIVE)->where('expires_at', '<=', now())->orderBy('id')->pluck('order_id')->unique()->each(function ($orderId) use (&$count) {
             $order = Order::find($orderId);
-            if ($order && $order->status === Order::PENDING_PAYMENT) { $this->releaseOrder($order, StockReservation::EXPIRED); $order->update(['status' => Order::PAYMENT_EXPIRED]); $count++; }
+            if ($order && $order->status === Order::PENDING_PAYMENT) { $this->releaseOrder($order, StockReservation::EXPIRED); $order->update(['status' => Order::PAYMENT_EXPIRED, 'payment_status' => Order::PAYMENT_EXPIRED_STATUS, 'fulfillment_status' => Order::FULFILLMENT_CANCELLED, 'cancelled_at' => now()]); $count++; }
         });
         return $count;
     }

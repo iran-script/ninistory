@@ -15,7 +15,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        if (app()->environment(['local', 'testing'])) {
+        if (app()->environment('testing')) {
+            $this->call(CatalogTestFixtureSeeder::class);
+        } elseif (app()->environment('local') && config('demo_catalog.enabled')) {
             $this->call(CatalogDemoSeeder::class);
         }
 

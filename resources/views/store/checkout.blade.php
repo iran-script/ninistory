@@ -1,30 +1,16 @@
 @extends('layouts.store')
-@section('title', 'ثبت سفارش | نینی‌استوری')
+@section('title','تکمیل سفارش | نینی‌استوری')
 @section('content')
-<section class="mx-auto max-w-3xl px-4 py-10">
-    <h1 class="text-3xl font-bold">اطلاعات گیرنده و ارسال</h1>
-    @if($items->isEmpty())
-        <p class="mt-6 rounded-xl bg-white p-5">سبد خرید خالی است.</p>
-    @else
-        <form method="post" action="{{ route('checkout.store') }}" class="mt-6 space-y-4 rounded-2xl bg-white p-6">
-            @csrf
-            <input type="hidden" name="checkout_key" value="{{ $checkoutKey }}">
-            @foreach(['recipient_name'=>'نام گیرنده','phone'=>'شماره تماس','address'=>'نشانی کامل','postal_code'=>'کد پستی'] as $field=>$label)
-                <label class="block font-semibold">
-                    {{ $label }}
-                    <input required name="{{ $field }}" value="{{ old($field) }}" class="mt-1 block w-full rounded-xl border border-[var(--color-border)] p-3">
-                    @error($field)<span role="alert" class="text-red-700">{{ $message }}</span>@enderror
-                </label>
-            @endforeach
-            <h2 class="border-t pt-4 font-bold">مرور سفارش</h2>
-            @foreach($items as $item)
-                <p>{{ $item['variant']->product->name }} — {{ $item['quantity'] }} × {{ number_format($item['variant']->price_toman) }} تومان</p>
-            @endforeach
-            <p class="font-bold">جمع کالاها: {{ number_format($items->sum(fn($i) => $i['variant']->price_toman * $i['quantity'])) }} تومان</p>
-            <p class="text-sm text-[var(--color-muted)]">هزینه ارسال پس از انتخاب روش ارسال مشخص می‌شود. درگاه پرداخت هنوز فعال نیست.</p>
-            @error('cart')<p role="alert" class="text-red-700">{{ $message }}</p>@enderror
-            <button class="min-h-12 w-full rounded-xl bg-[var(--color-action)] font-bold text-white">ثبت سفارش برای پرداخت</button>
-        </form>
-    @endif
-</section>
+<section class="mx-auto max-w-3xl space-y-5 px-4 py-10" dir="rtl"><h1 class="text-3xl font-bold">نشانی و روش ارسال</h1>
+@if($items->isEmpty())<p class="rounded-xl bg-white p-5">سبد خرید خالی است.</p>@else
+<form method="post" action="{{ route('checkout.store') }}" class="space-y-4 rounded-2xl bg-white p-6">@csrf<input type="hidden" name="checkout_key" value="{{ $checkoutKey }}">
+@if($addresses->isNotEmpty())<fieldset><legend class="mb-2 font-bold">نشانی‌های ذخیره‌شده</legend><label class="block rounded-xl border p-3"><input type="radio" name="address_id" value="" checked> نشانی جدید</label>@foreach($addresses as $saved)<label class="mt-2 block rounded-xl border p-3"><input type="radio" name="address_id" value="{{ $saved->id }}"> {{ $saved->nickname ?: 'نشانی ذخیره‌شده' }} — {{ $saved->recipient_name }}، {{ $saved->city }}، {{ $saved->address }}</label>@endforeach</fieldset>@endif
+<div class="grid gap-4 sm:grid-cols-2">@foreach(['recipient_name'=>'نام گیرنده','phone'=>'شماره تماس','postal_code'=>'کد پستی'] as $field=>$label)<label class="block font-semibold">{{ $label }}<input name="{{ $field }}" value="{{ old($field) }}" class="mt-1 block w-full rounded-xl border p-3">@error($field)<span role="alert" class="text-red-700">{{ $message }}</span>@enderror</label>@endforeach</div>
+<label class="block font-semibold">نشانی کامل<textarea name="address" class="mt-1 block w-full rounded-xl border p-3">{{ old('address') }}</textarea></label><label class="block font-semibold">پلاک، طبقه یا واحد<input name="building" value="{{ old('building') }}" class="mt-1 block w-full rounded-xl border p-3"></label>
+<div class="grid gap-4 sm:grid-cols-2"><label>استان<select name="province_code" class="mt-1 block w-full rounded-xl border p-3"><option value="">انتخاب استان</option>@foreach($provinces as $p)<option value="{{ $p->code }}">{{ $p->name }}</option>@endforeach</select></label><label>شهر<select name="city_code" class="mt-1 block w-full rounded-xl border p-3"><option value="">انتخاب شهر</option>@foreach($provinces as $p)@foreach($p->cities as $c)<option value="{{ $c->code }}" data-province="{{ $p->code }}">{{ $c->name }}</option>@endforeach @endforeach</select></label></div>
+<fieldset><legend class="mb-2 font-bold">روش ارسال</legend>@foreach($shippingMethods as $method)<label class="mb-2 block rounded-xl border p-3"><input required type="radio" name="shipping_method" value="{{ $method->code }}" data-pickup="{{ $method->code==='pickup'?'1':'0' }}"> <b>{{ $method->name }}</b><small class="block text-slate-500">{{ $method->estimated_delivery }} · {{ $method->base_fee_toman ? number_format($method->base_fee_toman).' تومان' : 'رایگان' }}</small></label>@endforeach</fieldset>
+@if($pickupLocations->isNotEmpty())<label id="pickup-location" class="hidden font-semibold">محل تحویل حضوری<select name="pickup_location_id" class="mt-1 block w-full rounded-xl border p-3"><option value="">انتخاب محل</option>@foreach($pickupLocations as $location)<option value="{{ $location->id }}">{{ $location->name }} — {{ $location->address }} ({{ $location->opening_hours }})</option>@endforeach</select></label>@endif
+<h2 class="border-t pt-4 font-bold">مرور سفارش</h2>@foreach($items as $item)<p>{{ $item['variant']->product->name }} — {{ $item['quantity'] }} × {{ number_format($item['variant']->price_toman) }} تومان</p>@endforeach<p class="text-sm text-slate-600">هزینه ارسال در سمت سرور محاسبه و در سفارش قفل می‌شود.</p>@error('shipping_method')<p class="text-red-700">{{ $message }}</p>@enderror @error('pickup_location_id')<p class="text-red-700">{{ $message }}</p>@enderror @error('cart')<p class="text-red-700">{{ $message }}</p>@enderror<button class="w-full rounded-xl bg-[var(--color-action)] p-3 font-bold text-white">ثبت سفارش برای پرداخت</button>
+</form>@endif</section>
 @endsection
+@push('scripts')<script>const city=document.querySelector('[name=city_code]'),province=document.querySelector('[name=province_code]'),pickup=document.getElementById('pickup-location');province?.addEventListener('change',()=>city?.querySelectorAll('option[data-province]').forEach(o=>o.hidden=o.dataset.province!==province.value));document.querySelectorAll('[name=shipping_method]').forEach(r=>r.addEventListener('change',()=>{if(pickup)pickup.classList.toggle('hidden',r.dataset.pickup!=='1')}));</script>@endpush

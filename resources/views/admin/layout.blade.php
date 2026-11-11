@@ -19,6 +19,7 @@
         <a href="{{ route('admin.products.index') }}">محصولات</a>
         <a href="{{ route('admin.inventory.index') }}">مدیریت موجودی</a>
         <a href="{{ route('admin.inventory.reservations') }}">رزروهای موجودی</a>
+        <a href="{{ route('admin.payments.index') }}">پرداخت‌ها</a>
         <form method="post" action="{{ route('admin.logout') }}">@csrf<button class="admin-button admin-button--muted">خروج</button></form>
     </aside>
     <main class="admin-main">

@@ -1,21 +1,21 @@
 <?php
-
 namespace App\Models;
-
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-
-class Order extends Model
-{
-    public const PENDING_PAYMENT = 'pending_payment';
-    public const PAID = 'paid';
-    public const PAYMENT_FAILED = 'payment_failed';
-    public const PAYMENT_EXPIRED = 'payment_expired';
-    public const CANCELLED = 'cancelled';
-    public const FULFILLED = 'fulfilled';
-    public const RETURNED = 'returned';
-    protected $fillable = ['number','checkout_key','user_id','recipient_name','phone','address','postal_code','currency','subtotal_toman','discount_toman','shipping_toman','status'];
-    protected function casts(): array { return ['subtotal_toman'=>'integer','discount_toman'=>'integer','shipping_toman'=>'integer']; }
-    public function items(): HasMany { return $this->hasMany(OrderItem::class); }
-    public function reservations(): HasMany { return $this->hasMany(StockReservation::class); }
+use Illuminate\Database\Eloquent\Relations\{HasMany, BelongsTo};
+class Order extends Model {
+    public const PENDING_PAYMENT='pending_payment'; public const PAID='paid'; public const PAYMENT_FAILED='payment_failed'; public const PAYMENT_EXPIRED='payment_expired'; public const CANCELLED='cancelled'; public const FULFILLED='fulfilled'; public const RETURNED='returned';
+    public const PAYMENT_PENDING='pending'; public const PAYMENT_PAID='paid'; public const PAYMENT_FAILED_STATUS='failed'; public const PAYMENT_EXPIRED_STATUS='expired'; public const PAYMENT_REFUNDED='refunded'; public const PAYMENT_PARTIALLY_REFUNDED='partially_refunded';
+    public const FULFILLMENT_AWAITING='awaiting_payment'; public const FULFILLMENT_READY='ready_to_process'; public const FULFILLMENT_PROCESSING='processing'; public const FULFILLMENT_PACKED='packed'; public const FULFILLMENT_FULFILLED='fulfilled'; public const FULFILLMENT_CANCELLED='cancelled';
+    public const SHIPMENT_NOT_SHIPPED='not_shipped'; public const SHIPMENT_SHIPPED='shipped'; public const SHIPMENT_IN_TRANSIT='in_transit'; public const SHIPMENT_DELIVERED='delivered'; public const SHIPMENT_FAILED='failed_delivery'; public const SHIPMENT_RETURNED='returned_to_sender';
+    public const CANCELLATION_NONE='not_cancelled'; public const CANCELLATION_REQUESTED='requested'; public const CANCELLATION_CANCELLED='cancelled';
+    public const REFUND_NONE='not_requested'; public const REFUND_PENDING='pending'; public const REFUND_PROCESSING='processing'; public const REFUND_COMPLETE='complete';
+    public const RETURN_NONE='not_requested'; public const RETURN_REQUESTED='requested'; public const RETURN_REVIEW='under_review'; public const RETURN_APPROVED='approved'; public const RETURN_REJECTED='rejected'; public const RETURN_RECEIVED='received'; public const RETURN_INSPECTED='inspected'; public const RETURN_CLOSED='closed';
+    protected $fillable=['number','checkout_key','guest_access_token','user_id','shipping_address_id','assigned_user_id','recipient_name','phone','address','postal_code','currency','subtotal_toman','discount_toman','shipping_toman','shipping_method_code','shipping_method_name','shipping_rate_snapshot','shipping_address_snapshot','status','payment_status','fulfillment_status','shipment_status','cancellation_status','refund_status','return_status','cancel_reason','cancelled_at'];
+    protected function casts(): array { return ['subtotal_toman'=>'integer','discount_toman'=>'integer','shipping_toman'=>'integer','shipping_rate_snapshot'=>'array','shipping_address_snapshot'=>'array','cancelled_at'=>'datetime']; }
+    public function getTotalTomanAttribute(): int { return (int) $this->subtotal_toman + (int) $this->shipping_toman - (int) $this->discount_toman; }
+    public function getCreatedAtJalaliAttribute(): string { $formatter = new \IntlDateFormatter('fa_IR@calendar=persian', \IntlDateFormatter::MEDIUM, \IntlDateFormatter::SHORT, config('app.timezone')); return $formatter->format($this->created_at); }
+    public function paymentLabel(): string { return ['pending'=>'در انتظار پرداخت','paid'=>'پرداخت‌شده','failed'=>'ناموفق','expired'=>'منقضی','refunded'=>'بازپرداخت‌شده','partially_refunded'=>'بازپرداخت جزئی'][$this->payment_status] ?? $this->payment_status; }
+    public function fulfillmentLabel(): string { return ['awaiting_payment'=>'در انتظار پرداخت','ready_to_process'=>'آماده پردازش','processing'=>'در حال پردازش','packed'=>'بسته‌بندی‌شده','fulfilled'=>'تکمیل‌شده','cancelled'=>'لغوشده'][$this->fulfillment_status] ?? $this->fulfillment_status; }
+    public function shipmentLabel(): string { return ['not_shipped'=>'ارسال نشده','shipped'=>'ارسال‌شده','in_transit'=>'در مسیر','delivered'=>'تحویل‌شده','failed_delivery'=>'مشکل در تحویل','returned_to_sender'=>'مرجوع به فرستنده'][$this->shipment_status] ?? $this->shipment_status; }
+    public function items(): HasMany { return $this->hasMany(OrderItem::class); } public function reservations(): HasMany { return $this->hasMany(StockReservation::class); } public function events(): HasMany { return $this->hasMany(OrderEvent::class); } public function shipments(): HasMany { return $this->hasMany(Shipment::class); } public function notes(): HasMany { return $this->hasMany(OrderNote::class); } public function payments(): HasMany { return $this->hasMany(Payment::class); } public function refunds(): HasMany { return $this->hasMany(Refund::class); } public function returns(): HasMany { return $this->hasMany(ReturnRequest::class); } public function assignedOperator(): BelongsTo { return $this->belongsTo(User::class,'assigned_user_id'); }
 }
