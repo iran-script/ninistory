@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Product;
 use App\Models\Banner;
+use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -40,8 +40,8 @@ class StorefrontTest extends TestCase
         $this->seed();
         $variant = Product::firstOrFail()->variants()->firstOrFail();
         $this->post(route('cart.add'), ['variant_id' => $variant->id, 'quantity' => 2]);
-        $this->post(route('checkout.store'), ['recipient_name'=>'آزمایش', 'phone'=>'09120000000', 'address'=>'تهران', 'postal_code'=>'1234567890'])->assertRedirect();
-        $this->assertDatabaseHas('orders', ['subtotal_toman'=>1780000, 'status'=>'pending_payment', 'currency'=>'IRR']);
+        $this->post(route('checkout.store'), ['recipient_name' => 'آزمایش', 'phone' => '09120000000', 'address' => 'تهران', 'postal_code' => '1234567890'])->assertRedirect();
+        $this->assertDatabaseHas('orders', ['subtotal_toman' => 1780000, 'status' => 'pending_payment', 'currency' => 'IRR']);
         $this->assertDatabaseCount('payments', 0);
         $this->assertSame(8, $variant->fresh()->stock_quantity);
         $this->assertSame(2, $variant->fresh()->reserved_quantity);
@@ -52,9 +52,10 @@ class StorefrontTest extends TestCase
     {
         $this->seed();
 
-        $this->get('/')
+        $this->get('/')->assertOk()->assertDontSee('/_local-preview/images/', false);
+        $this->get(route('products.show', Product::firstOrFail()))
             ->assertOk()
-            ->assertDontSee('/_local-preview/images/', false);
+            ->assertSee('product-media__fallback', false);
     }
 
     public function test_existing_product_image_uses_the_public_storage_url(): void

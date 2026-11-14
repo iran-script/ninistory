@@ -36,6 +36,15 @@
         <label>توضیح SEO
             <input name="meta_description" value="{{ old('meta_description', $category->meta_description) }}">
         </label>
+        <label>Canonical URL
+            <input dir="ltr" name="canonical_url" value="{{ old('canonical_url', $category->canonical_url) }}">
+        </label>
+        <label>دستور ربات
+            <select name="robots_directive"><option value="">پیش‌فرض</option><option value="index,follow" @selected(old('robots_directive',$category->robots_directive)==='index,follow')>index,follow</option><option value="noindex,follow" @selected(old('robots_directive',$category->robots_directive)==='noindex,follow')>noindex,follow</option><option value="noindex,nofollow" @selected(old('robots_directive',$category->robots_directive)==='noindex,nofollow')>noindex,nofollow</option></select>
+        </label>
+        <label class="admin-span">محتوای تکمیلی SEO
+            <textarea name="seo_content" rows="4">{{ old('seo_content', $category->seo_content) }}</textarea>
+        </label>
         <label class="admin-span">تصویر کاور دسته‌بندی
             <input type="file" name="image" accept="image/jpeg,image/png,image/webp">
         </label>

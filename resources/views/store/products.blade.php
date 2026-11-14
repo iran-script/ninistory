@@ -2,6 +2,11 @@
 @section('title', 'لباس‌های کودک | نینی‌استوری')
 @section('content')
 <section class="mx-auto max-w-[1500px] px-4 py-6 md:px-6">
+    @if(isset($category))
+        <nav class="mb-4 text-sm text-[var(--color-muted)]"><a href="{{ route('home') }}">خانه</a> / {{ $category->name }}</nav>
+        @if($category->seo_content)<div class="mb-5 rounded-2xl bg-white p-5 leading-8 text-slate-700">{{ $category->seo_content }}</div>@endif
+        @if($category->children->isNotEmpty())<nav class="mb-5 flex flex-wrap gap-2" aria-label="زیر‌دسته‌ها">@foreach($category->children as $child)<a class="rounded-full bg-white px-4 py-2 text-sm font-bold" href="{{ route('categories.show', $child) }}">{{ $child->name }}</a>@endforeach</nav>@endif
+    @endif
     <div class="mb-6 rounded-2xl bg-[#fbe5e7] px-6 py-7 text-right md:px-10 md:py-8">
         <p class="text-sm text-[var(--color-muted)]">خانه　›　پوشاک کودک</p>
         <h1 class="mt-3 text-2xl font-extrabold md:text-3xl">لباس‌های کودک</h1>
@@ -9,7 +14,7 @@
     </div>
     <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" aria-label="دسته‌بندی‌های تصویری">
         @foreach ($categories as $category)
-            <a class="relative h-24 overflow-hidden rounded-2xl bg-[#fce9ed]" href="{{ route('products.index', ['category' => $category->id]) }}">
+            <a class="relative h-24 overflow-hidden rounded-2xl bg-[#fce9ed]" href="{{ route('categories.show', $category) }}">
                 <img class="h-full w-full object-cover" src="{{ $categoryImages[$category->slug] ?? asset('images/ninistory/banner-collection.webp') }}" alt="{{ $category->name }}" loading="lazy">
                 <span class="absolute bottom-2 start-2 rounded-lg bg-white/85 px-3 py-1 text-sm font-bold">{{ $category->name }}</span>
             </a>

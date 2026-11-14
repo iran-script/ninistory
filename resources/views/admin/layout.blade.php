@@ -17,6 +17,8 @@
         <a href="{{ route('admin.categories.index') }}">دسته‌بندی‌ها</a>
         <a href="{{ route('admin.banners.index') }}">مدیریت بنرها</a>
         <a href="{{ route('admin.products.index') }}">محصولات</a>
+        <a href="{{ route('admin.articles.index') }}">مجله و مقالات</a>
+        <a href="{{ route('admin.seo.edit') }}">مدیریت سئو</a>
         <a href="{{ route('admin.inventory.index') }}">مدیریت موجودی</a>
         <a href="{{ route('admin.inventory.reservations') }}">رزروهای موجودی</a>
         <a href="{{ route('admin.payments.index') }}">پرداخت‌ها</a>

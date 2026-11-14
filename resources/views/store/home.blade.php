@@ -6,8 +6,11 @@
     @php
         $presentation = [
             'girls' => ['title' => 'دخترانه', 'image' => 'girls'],
+            'demo-girls' => ['title' => 'دخترانه', 'image' => 'girls'],
             'boys' => ['title' => 'پسرانه', 'image' => 'boys'],
+            'demo-boys' => ['title' => 'پسرانه', 'image' => 'boys'],
             'baby' => ['title' => 'نوزادی', 'image' => 'newborn'],
+            'demo-baby' => ['title' => 'نوزادی', 'image' => 'newborn'],
             'newborn' => ['title' => 'نوزادی', 'image' => 'newborn'],
         ];
         $hero = $banners['hero'];
@@ -33,7 +36,7 @@
         <section class="home-categories" aria-label="دسته‌بندی محصولات">
             @foreach ($categories as $category)
                 @php($categoryPresentation = $presentation[$category->slug] ?? ['title' => $category->name, 'image' => 'newborn'])
-                <a class="category-tile category-tile--{{ $categoryPresentation['image'] }}" href="{{ route('products.index', ['category' => $category->id]) }}" aria-label="{{ $categoryPresentation['title'] }}">
+                <a class="category-tile category-tile--{{ $categoryPresentation['image'] }}" href="{{ route('categories.show', $category) }}" aria-label="{{ $categoryPresentation['title'] }}">
                     <img src="{{ $categoryImages[$category->slug] ?? asset('images/ninistory/banner-collection.webp') }}" alt="{{ $categoryPresentation['title'] }}" loading="lazy">
                     <span>{{ $categoryPresentation['title'] }}</span>
                     <span class="category-tile__arrow" aria-hidden="true">←</span>
