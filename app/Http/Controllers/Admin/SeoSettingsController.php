@@ -12,7 +12,7 @@ class SeoSettingsController extends Controller
 {
     public function edit(): View
     {
-        return view('admin.seo.edit', ['settings' => SeoSetting::query()->firstOrCreate([], ['site_name' => 'نینی‌استوری', 'tagline' => 'قصه‌های قشنگ کوچولوها'])]);
+        return view('admin.seo.edit', ['settings' => SeoSetting::query()->firstOrCreate([], ['site_name' => 'کیدوکی', 'tagline' => 'قصه‌های قشنگ کوچولوها'])]);
     }
 
     public function update(Request $request): RedirectResponse

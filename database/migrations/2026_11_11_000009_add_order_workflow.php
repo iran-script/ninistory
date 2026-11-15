@@ -5,7 +5,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::table('orders', function (Blueprint $table) {
@@ -89,9 +90,14 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::dropIfExists('return_items'); Schema::dropIfExists('returns'); Schema::dropIfExists('order_notes'); Schema::dropIfExists('shipments'); Schema::dropIfExists('order_events');
+        Schema::dropIfExists('return_items');
+        Schema::dropIfExists('returns');
+        Schema::dropIfExists('order_notes');
+        Schema::dropIfExists('shipments');
+        Schema::dropIfExists('order_events');
         Schema::table('orders', function (Blueprint $table) {
-            $table->dropForeign(['assigned_user_id']); $table->dropUnique(['guest_access_token']);
+            $table->dropForeign(['assigned_user_id']);
+            $table->dropUnique(['guest_access_token']);
             $table->dropIndex(['payment_status', 'fulfillment_status', 'shipment_status']);
             $table->dropColumn(['payment_status', 'fulfillment_status', 'shipment_status', 'guest_access_token', 'assigned_user_id', 'cancel_reason', 'cancelled_at']);
         });

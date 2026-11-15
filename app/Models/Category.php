@@ -6,14 +6,29 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 class Category extends Model
 {
-    protected $fillable = ['parent_id', 'name', 'slug', 'description', 'image_path', 'meta_title', 'meta_description', 'canonical_url', 'robots_directive', 'seo_content', 'is_active', 'sort_order'];
+    public const STOREFRONT_CACHE_KEY = 'storefront:categories:active:v2';
+
+    protected $fillable = ['parent_id', 'name', 'slug', 'description', 'image_path', 'meta_title', 'meta_description', 'canonical_url', 'robots_directive', 'seo_content', 'is_active', 'sort_order', 'primary_search_intent', 'buying_guide', 'faqs', 'related_category_ids', 'editorial_review_status'];
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return ['is_active' => 'boolean', 'faqs' => 'array', 'related_category_ids' => 'array'];
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (): void {
+            Cache::forget(self::STOREFRONT_CACHE_KEY);
+            Cache::forget('seo:sitemap:categories');
+        });
+        static::deleted(function (): void {
+            Cache::forget(self::STOREFRONT_CACHE_KEY);
+            Cache::forget('seo:sitemap:categories');
+        });
     }
 
     public function products(): HasMany
@@ -29,6 +44,11 @@ class Category extends Model
     public function children(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order');
+    }
+
+    public function sizeGuides(): HasMany
+    {
+        return $this->hasMany(SizeGuide::class);
     }
 
     public function descendants(): Collection

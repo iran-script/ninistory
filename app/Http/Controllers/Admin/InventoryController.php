@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
-use App\Models\InventoryMovement;
 use App\Models\ProductVariant;
 use App\Models\StockReservation;
 use App\Services\InventoryService;
@@ -21,6 +20,7 @@ class InventoryController extends Controller
             ->when($request->boolean('out_of_stock'), fn ($q) => $q->whereRaw('stock_quantity <= reserved_quantity'))
             ->when($request->boolean('low_stock'), fn ($q) => $q->whereRaw('stock_quantity > reserved_quantity AND (stock_quantity - reserved_quantity) <= ?', [config('inventory.low_stock_threshold', 5)]))
             ->orderBy('sku')->paginate(25)->withQueryString();
+
         return view('admin.inventory.index', ['variants' => $variants, 'categories' => Category::orderBy('name')->get()]);
     }
 
@@ -28,6 +28,7 @@ class InventoryController extends Controller
     {
         $data = $request->validate(['quantity' => ['required', 'integer', 'min:1', 'max:1000000'], 'reason' => ['required', 'string', 'min:3', 'max:180']]);
         app(InventoryService::class)->receive($variant, $data['quantity'], $data['reason'], $request->user());
+
         return back()->with('status', 'دریافت موجودی ثبت شد.');
     }
 

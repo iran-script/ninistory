@@ -101,6 +101,6 @@ class ShippingCheckoutController extends Controller
         session(['completed_order_number' => $order->number]);
         session()->forget(['cart', 'checkout_key']);
 
-        return redirect()->route('checkout.complete',$order);
+        return redirect()->route('checkout.complete', $order);
     }
 }

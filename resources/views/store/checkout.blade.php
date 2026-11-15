@@ -1,5 +1,5 @@
 @extends('layouts.store')
-@section('title','تکمیل سفارش | نینی‌استوری')
+@section('title','تکمیل سفارش | کیدوکی')
 @section('content')
 <section class="mx-auto max-w-3xl space-y-5 px-4 py-10" dir="rtl"><h1 class="text-3xl font-bold">نشانی و روش ارسال</h1>
 @if($items->isEmpty())<p class="rounded-xl bg-white p-5">سبد خرید خالی است.</p>@else

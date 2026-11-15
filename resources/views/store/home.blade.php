@@ -1,6 +1,6 @@
 @extends('layouts.store')
 
-@section('title', 'نینی‌استوری | قصه‌ی خوش‌پوشی')
+@section('title', 'کیدوکی | قصه‌ی خوش‌پوشی')
 
 @section('content')
     @php
@@ -17,12 +17,16 @@
         $secondary = $banners['secondary'];
         $collection = $banners['collection'];
     @endphp
+    @push('head')
+        <link rel="preload" as="image" href="{{ $hero['mobile_url'] }}" media="(max-width: 767px)" fetchpriority="high">
+        <link rel="preload" as="image" href="{{ $hero['desktop_url'] }}" media="(min-width: 768px)" fetchpriority="high">
+    @endpush
 
     <div class="home-shell">
         <section class="home-hero" aria-label="{{ $hero['title'] }}">
             <picture>
                 <source media="(max-width: 767px)" srcset="{{ $hero['mobile_url'] }}">
-                <img class="home-hero__image" src="{{ $hero['desktop_url'] }}" alt="{{ $hero['alt_text'] }}" fetchpriority="high">
+                <img class="home-hero__image" src="{{ $hero['desktop_url'] }}" alt="{{ $hero['alt_text'] }}" width="1600" height="700" sizes="100vw" loading="eager" decoding="async" fetchpriority="high">
             </picture>
             <div class="home-hero__copy">
                 <p class="eyebrow">{{ $hero['subtitle'] }}</p>
@@ -37,7 +41,7 @@
             @foreach ($categories as $category)
                 @php($categoryPresentation = $presentation[$category->slug] ?? ['title' => $category->name, 'image' => 'newborn'])
                 <a class="category-tile category-tile--{{ $categoryPresentation['image'] }}" href="{{ route('categories.show', $category) }}" aria-label="{{ $categoryPresentation['title'] }}">
-                    <img src="{{ $categoryImages[$category->slug] ?? asset('images/ninistory/banner-collection.webp') }}" alt="{{ $categoryPresentation['title'] }}" loading="lazy">
+                    <img src="{{ $categoryImages[$category->slug] ?? asset('images/ninistory/banner-collection.webp') }}" alt="{{ $categoryPresentation['title'] }}" width="400" height="208" loading="lazy" decoding="async">
                     <span>{{ $categoryPresentation['title'] }}</span>
                     <span class="category-tile__arrow" aria-hidden="true">←</span>
                 </a>
@@ -49,7 +53,7 @@
             </a>
         </section>
 
-        <section class="service-strip" aria-label="خدمات نینی‌استوری">
+        <section class="service-strip" aria-label="خدمات کیدوکی">
             <div><span aria-hidden="true">□</span> ارسال سریع به سراسر ایران</div>
             <div><span aria-hidden="true">♢</span> ضمانت اصالت کالا</div>
             <div><span aria-hidden="true">↶</span> ۷ روز امکان بازگشت</div>
@@ -94,7 +98,7 @@
                 </span>
             </a>
             <div class="promo-card promo-card--size">
-                <img src="{{ $demoMediaUrl }}" alt="نمونه‌ی نمایشی طراحی نینی‌استوری؛ غیرقابل خرید" loading="lazy">
+                <img src="{{ $demoMediaUrl }}" alt="نمونه‌ی نمایشی طراحی کیدوکی؛ غیرقابل خرید" loading="lazy">
                 <span class="promo-card__copy">
                     <span class="eyebrow">نمونه‌ی نمایشی</span>
                     <strong>راهنمای اندازه و قصه‌های کوچک</strong>

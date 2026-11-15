@@ -54,7 +54,9 @@ class BannerController extends Controller
         }
 
         DB::transaction(fn () => $banner->update($data + $paths));
-        foreach (array_filter($oldPaths) as $path) Storage::disk('public')->delete($path);
+        foreach (array_filter($oldPaths) as $path) {
+            Storage::disk('public')->delete($path);
+        }
 
         return redirect()->route('admin.banners.index')->with('status', 'بنر به‌روزرسانی شد.');
     }
@@ -63,7 +65,9 @@ class BannerController extends Controller
     {
         $paths = [$banner->desktop_image_path, $banner->mobile_image_path];
         $banner->delete();
-        foreach (array_filter($paths) as $path) Storage::disk('public')->delete($path);
+        foreach (array_filter($paths) as $path) {
+            Storage::disk('public')->delete($path);
+        }
 
         return back()->with('status', 'بنر حذف شد.');
     }
@@ -97,7 +101,9 @@ class BannerController extends Controller
     private function storeImages(Request $request): array
     {
         $paths = ['desktop_image_path' => $this->storeImage($request->file('desktop_image'))];
-        if ($request->hasFile('mobile_image')) $paths['mobile_image_path'] = $this->storeImage($request->file('mobile_image'));
+        if ($request->hasFile('mobile_image')) {
+            $paths['mobile_image_path'] = $this->storeImage($request->file('mobile_image'));
+        }
 
         return $paths;
     }

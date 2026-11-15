@@ -1,0 +1,31 @@
+{
+    "regression": {
+        "performance_score_tolerance": 5,
+        "lcp_tolerance_ms": 150,
+        "lcp_tolerance_ratio": 0.1,
+        "cls_tolerance": 0.03
+    },
+    "defaults": {
+        "mobile": {
+            "performance_min": 90,
+            "lcp_max_ms": 2500,
+            "cls_max": 0.1,
+            "tbt_max_ms": 200,
+            "transfer_max_bytes": 900000
+        },
+        "desktop": {
+            "performance_min": 90,
+            "lcp_max_ms": 2500,
+            "cls_max": 0.1,
+            "tbt_max_ms": 200,
+            "transfer_max_bytes": 900000
+        }
+    },
+    "pages": {},
+    "assets": {
+        "public/build/assets/*.css": 100000,
+        "public/build/assets/*.js": 50000,
+        "public/build/assets/*.woff2": 125000,
+        "public/brand-logo.webp": 10000
+    }
+}

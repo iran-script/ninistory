@@ -21,7 +21,7 @@ class StorefrontTest extends TestCase
     public function test_persian_homepage_and_listing_render_utf8(): void
     {
         $this->seed();
-        $this->get('/')->assertOk()->assertSee('نینی‌استوری');
+        $this->get('/')->assertOk()->assertSee('کیدوکی');
         $this->get('/products?q=سرهمی')->assertOk()->assertSee('سرهمی');
     }
 
@@ -73,6 +73,33 @@ class StorefrontTest extends TestCase
         $this->get(route('products.show', $product))
             ->assertOk()
             ->assertSee('/storage/'.$imagePath, false);
+    }
+
+    public function test_product_media_uses_lazy_loading_dimensions_and_responsive_sources(): void
+    {
+        Storage::fake('public');
+        $product = Product::create(['name' => 'Responsive product', 'slug' => 'responsive-product', 'is_active' => true]);
+        $product->variants()->create([
+            'sku' => 'RESPONSIVE-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000,
+            'stock_quantity' => 2, 'is_active' => true,
+        ]);
+        $imagePath = 'products/'.$product->id.'/cover.jpg';
+        Storage::disk('public')->put($imagePath, 'image');
+        Storage::disk('public')->put('products/'.$product->id.'/cover-400.webp', 'small');
+        $product->images()->create(['path' => $imagePath, 'width' => 1200, 'height' => 1500, 'alt_text' => 'Cover', 'sort_order' => 0, 'is_cover' => true]);
+
+        $this->get(route('products.index'))
+            ->assertOk()
+            ->assertSee('loading="lazy"', false)
+            ->assertSee('width="1200" height="1500"', false)
+            ->assertSee('/storage/products/'.$product->id.'/cover-400.webp 400w', false);
+    }
+
+    public function test_checkout_responses_are_private_and_uncached(): void
+    {
+        $this->get(route('checkout'))
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'max-age=0, no-store, private');
     }
 
     public function test_homepage_uses_active_managed_banner_media(): void

@@ -43,12 +43,75 @@ class SeoTest extends TestCase
         $this->assertStringNotContainsString($hidden->slug, $xml);
     }
 
+    public function test_product_sitemap_cache_is_invalidated_after_product_changes(): void
+    {
+        $this->get(route('seo.sitemap.products'))->assertOk()->assertDontSee('cached-product');
+        $product = Product::create(['name' => 'Cached product', 'slug' => 'cached-product', 'is_active' => true]);
+        $product->variants()->create(['sku' => 'CACHED-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 1, 'is_active' => true]);
+
+        $this->get(route('seo.sitemap.products'))->assertOk()->assertSee('/products/cached-product', false);
+    }
+
+    public function test_seo_settings_cache_is_invalidated_after_update(): void
+    {
+        SeoSetting::create(['default_title' => 'First title']);
+        $this->get(route('home'))->assertSee('First title');
+        SeoSetting::firstOrFail()->update(['default_title' => 'Second title']);
+
+        $this->get(route('home'))->assertSee('Second title');
+    }
+
     public function test_local_robots_disallow_crawling_and_category_has_canonical_url(): void
     {
         $this->seed();
         $this->get(route('seo.robots'))->assertOk()->assertSee('Disallow: /');
         $category = Category::where('slug', 'girls')->firstOrFail();
         $this->get(route('categories.show', $category))->assertOk()->assertSee(route('categories.show', $category), false);
+    }
+
+    public function test_homepage_uses_kidoki_branding_and_local_canonical(): void
+    {
+        $html = $this->get(route('home'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('کیدوکی', $html);
+        $this->assertStringContainsString('og:site_name', $html);
+        $this->assertStringContainsString(route('home'), $html);
+        $this->assertStringNotContainsString('https://kidoki.ir/', $html);
+    }
+
+    public function test_production_canonical_uses_kidoki_domain_without_enabling_indexing(): void
+    {
+        $this->app->detectEnvironment(fn (): string => 'production');
+        config(['seo.indexing_enabled' => false]);
+
+        $html = $this->get(route('home'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('https://kidoki.ir/', $html);
+        $this->assertStringContainsString('noindex,follow', $html);
+    }
+
+    public function test_homepage_schema_declares_kidoki_online_store(): void
+    {
+        $html = $this->get(route('home'))->assertOk()->getContent();
+        preg_match('/<script type="application\/ld\+json">(.*?)<\/script>/s', $html, $match);
+        $schema = json_decode($match[1] ?? '', true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertContains('OnlineStore', $schema['@type']);
+        $this->assertSame('Kidoki', $schema['name']);
+        $this->assertSame('https://www.instagram.com/kidoki_shop', $schema['sameAs'][0]);
+    }
+
+    public function test_official_kidoki_brand_assets_are_public_and_referenced(): void
+    {
+        $html = $this->get(route('home'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('/brand-logo.webp', $html);
+        $this->assertStringContainsString('/images/brand/favicon-32.png', $html);
+        $this->assertStringContainsString('/images/brand/apple-touch-icon.png', $html);
+        $this->assertStringContainsString('og:image', $html);
+        $this->assertFileExists(public_path('brand-logo.webp'));
+        $this->assertFileExists(public_path('images/brand/logo-512.webp'));
+        $this->assertFileExists(public_path('images/brand/favicon-32.png'));
     }
 
     public function test_indexing_requires_production_config_and_explicit_admin_setting(): void

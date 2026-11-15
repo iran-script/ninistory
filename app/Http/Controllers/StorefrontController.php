@@ -9,54 +9,60 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Services\InventoryReservationService;
+use App\Services\ProductSearchService;
 use App\Services\SeoMetadataService;
 use App\Services\SeoSchemaService;
 use App\Services\ShippingAddressService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 class StorefrontController extends Controller
 {
     public function home(): View
     {
-        $categories = Category::where('is_active', true)->whereNull('parent_id')->orderBy('sort_order')->get();
-        $activeBanners = Banner::active()->get()->groupBy('position');
+        $categories = collect(Cache::remember(Category::STOREFRONT_CACHE_KEY, now()->addSeconds(config('performance.public_cache_ttl', 300)), fn (): array => Category::query()->select(['id', 'parent_id', 'name', 'slug', 'image_path'])->where('is_active', true)->whereNull('parent_id')->orderBy('sort_order')->get()->map(fn (Category $category): array => $category->getAttributes())->all()))
+            ->map(fn (array $attributes): Category => Category::query()->getModel()->newFromBuilder($attributes));
+        $activeBanners = collect(Cache::remember(Banner::STOREFRONT_CACHE_KEY, now()->addSeconds(config('performance.public_cache_ttl', 300)), fn (): array => Banner::active()->get()->map(fn (Banner $banner): array => $banner->getAttributes())->all()))
+            ->map(fn (array $attributes): Banner => Banner::query()->getModel()->newFromBuilder($attributes))
+            ->groupBy('position');
 
         return view('store.home', [
             'seo' => app(SeoMetadataService::class)->home(),
-            'schemas' => [app(SeoSchemaService::class)->organization()],
+            'schemas' => [app(SeoSchemaService::class)->organization(), app(SeoSchemaService::class)->website()],
             'categories' => $categories,
             'categoryImages' => $categories->mapWithKeys(fn (Category $category) => [$category->slug => $this->categoryImageUrl($category)])->all(),
             'banners' => [
                 'hero' => $this->bannerMedia($activeBanners->get('hero')?->first(), [
                     'title' => 'روزهای شیرین با لباس‌های دوست‌داشتنی',
-                    'subtitle' => 'مجموعه‌ی تازه نینی‌استوری',
+                    'subtitle' => 'مجموعه‌ی تازه کیدوکی',
                     'desktop_url' => asset('images/ninistory/hero-kidswear.webp'),
                     'mobile_url' => asset('images/ninistory/hero-kidswear.webp'),
                     'cta_label' => 'دیدن مجموعه', 'cta_url' => route('products.index'),
-                    'alt_text' => 'مجموعه لباس کودک نینی‌استوری',
+                    'alt_text' => 'مجموعه لباس کودک کیدوکی',
                 ]),
                 'secondary' => $this->bannerMedia($activeBanners->get('secondary')?->first(), [
                     'title' => 'انتخاب‌های دوست‌داشتنی', 'subtitle' => 'برای دختر کوچولوی شما',
                     'desktop_url' => asset('images/ninistory/banner-girls.webp'),
                     'mobile_url' => asset('images/ninistory/banner-girls.webp'),
                     'cta_label' => 'مشاهده محصولات', 'cta_url' => route('products.index'),
-                    'alt_text' => 'پیشنهادهای لباس دخترانه نینی‌استوری',
+                    'alt_text' => 'پیشنهادهای لباس دخترانه کیدوکی',
                 ]),
                 'collection' => $this->bannerMedia($activeBanners->get('collection')?->first(), [
                     'title' => 'کالکشن‌های داستانی', 'subtitle' => 'قصه‌ی یک فصل تازه',
                     'desktop_url' => asset('images/ninistory/banner-collection.webp'),
                     'mobile_url' => asset('images/ninistory/banner-collection.webp'),
                     'cta_label' => 'دیدن کالکشن', 'cta_url' => route('products.index'),
-                    'alt_text' => 'کالکشن داستانی نینی‌استوری',
+                    'alt_text' => 'کالکشن داستانی کیدوکی',
                 ]),
             ],
             'demoMediaUrl' => asset('images/ninistory/demo-dress-pink.webp'),
-            'featured' => Product::with(['variants', 'images'])->where('is_active', true)->where('is_featured', true)->whereHas('variants', fn ($q) => $q->where('is_active', true))->latest()->take(4)->get(),
+            'featured' => Product::with(['variants:id,product_id,price_toman,stock_quantity,reserved_quantity,is_active', 'images:id,product_id,path,width,height,alt_text,sort_order', 'category:id,slug,name'])->where('is_active', true)->where('is_featured', true)->whereHas('variants', fn ($q) => $q->where('is_active', true))->latest()->take(4)->get(),
         ]);
     }
 
@@ -93,22 +99,22 @@ class StorefrontController extends Controller
         };
     }
 
-    public function index(Request $request): View
+    public function index(Request $request, ProductSearchService $search): View
     {
-        $products = Product::with(['variants', 'images'])->where('is_active', true)->whereHas('variants', fn ($q) => $q->where('is_active', true))
-            ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->string('q').'%'))
+        $products = $search->visibleQuery()
+            ->when($request->filled('q'), fn ($q) => $search->applyTextSearch($q, $request->string('q')->toString()))
             ->when($request->integer('category'), fn ($q, $id) => $q->where('category_id', $id))
             ->when($request->filled('min_price') || $request->filled('max_price'), function ($q) use ($request) {
                 $q->whereHas('variants', function ($variants) use ($request) {
-                    $variants->where('is_active', true)
+                    $variants->where('is_active', true)->whereNull('archived_at')
                         ->when($request->filled('min_price'), fn ($v) => $v->where('price_toman', '>=', max(0, (int) $request->input('min_price'))))
                         ->when($request->filled('max_price'), fn ($v) => $v->where('price_toman', '<=', max(0, (int) $request->input('max_price'))));
                 });
             })
-            ->when($request->filled('size'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->where('size', $request->string('size'))))
-            ->when($request->filled('color'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->where('color_name', $request->string('color'))))
+            ->when($request->filled('size'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereNull('archived_at')->where('size', $request->string('size'))))
+            ->when($request->filled('color'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereNull('archived_at')->where('color_name', $request->string('color'))))
             ->when($request->filled('material'), fn ($q) => $q->where('material', $request->string('material')))
-            ->when($request->boolean('available'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereRaw('stock_quantity > reserved_quantity')))
+            ->when($request->boolean('available'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereNull('archived_at')->whereRaw('stock_quantity > reserved_quantity')))
             ->when($request->input('sort') === 'price_asc', fn ($q) => $q->withMin('variants', 'price_toman')->orderBy('variants_min_price_toman'))
             ->when($request->input('sort') === 'price_desc', fn ($q) => $q->withMax('variants', 'price_toman')->orderByDesc('variants_max_price_toman'))
             ->when(! in_array($request->input('sort'), ['price_asc', 'price_desc'], true), fn ($q) => $q->latest())
@@ -119,10 +125,22 @@ class StorefrontController extends Controller
         $hasFacets = collect(array_keys($request->query()))->reject(fn ($key) => $key === 'page')->isNotEmpty();
 
         return view('store.products', [
-            'seo' => $seoService->make('خرید لباس کودک و نوزاد | نینی‌استوری', 'انتخاب لباس کودک، دخترانه، پسرانه و نوزادی در فروشگاه اینترنتی نینی‌استوری.', route('products.index'), $hasFacets ? 'noindex,follow' : $seoService->defaults()['robots']),
+            'seo' => $seoService->make('خرید لباس کودک و نوزاد | کیدوکی', 'انتخاب لباس کودک، دخترانه، پسرانه و نوزادی در فروشگاه اینترنتی کیدوکی.', route('products.index'), $hasFacets ? 'noindex,follow' : $seoService->defaults()['robots']),
             'products' => $products,
             'categories' => $categories,
             'categoryImages' => $categories->mapWithKeys(fn (Category $category) => [$category->slug => $this->categoryImageUrl($category)])->all(),
+        ]);
+    }
+
+    public function autocomplete(Request $request, ProductSearchService $search): JsonResponse
+    {
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:80']]);
+        $query = $search->normalize((string) ($data['q'] ?? ''));
+
+        return response()->json([
+            'query' => $query,
+            'results' => $search->autocomplete($query),
+            'all_results_url' => route('products.index', ['q' => $query]),
         ]);
     }
 
@@ -133,6 +151,8 @@ class StorefrontController extends Controller
         $view = $this->index($request);
         $data = $view->getData();
         $data['category'] = $category->load(['parent', 'children']);
+        $data['relatedCategories'] = Category::query()->whereIn('id', $category->related_category_ids ?: [])->where('is_active', true)->get();
+        $data['sizeGuide'] = $category->sizeGuides()->where('is_published', true)->latest()->first();
         $data['seo'] = app(SeoMetadataService::class)->category($category, $data['products']->total() > 0);
         $data['schemas'] = [app(SeoSchemaService::class)->breadcrumb([
             ['name' => 'خانه', 'url' => route('home')],

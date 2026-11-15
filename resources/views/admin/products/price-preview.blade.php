@@ -1,0 +1,5 @@
+@extends('admin.layout')
+@section('content')
+<h1 class="mb-5 text-3xl font-extrabold">پیش‌نمایش تغییر قیمت</h1>
+<section class="admin-card"><p class="mb-3">قیمت جدید: <strong>{{ number_format($data['price_toman']) }} تومان</strong></p><table class="admin-table"><thead><tr><th>رنگ</th><th>سایز</th><th>SKU</th><th>قیمت فعلی</th></tr></thead><tbody>@foreach($variants as $variant)<tr><td>{{ $variant->color_name }}</td><td>{{ $variant->size }}</td><td dir="ltr">{{ $variant->sku }}</td><td>{{ number_format($variant->price_toman) }} تومان</td></tr>@endforeach</tbody></table><form method="post" action="{{ route('admin.products.prices.apply',$product) }}" class="mt-5">@csrf<input type="hidden" name="price_toman" value="{{ $data['price_toman'] }}">@foreach($variants as $variant)<input type="hidden" name="variant_ids[]" value="{{ $variant->id }}">@endforeach<button class="admin-button" onclick="return confirm('قیمت فقط برای تنوع‌های انتخاب‌شده ثبت شود؟')">تأیید و ذخیره</button> <a class="admin-button admin-button--muted" href="{{ route('admin.products.edit',$product) }}">انصراف</a></form></section>
+@endsection

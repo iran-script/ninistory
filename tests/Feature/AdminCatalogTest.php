@@ -4,11 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Category;
 use App\Models\Product;
-use App\Models\ProductVariant;
 use App\Models\User;
+use App\Services\ImageVariantService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -50,10 +50,14 @@ class AdminCatalogTest extends TestCase
         $this->actingAs(User::factory()->create(['is_admin' => true]));
         $category = Category::create(['name' => 'Girls', 'slug' => 'girls', 'is_active' => true, 'sort_order' => 1]);
         $payload = ['name' => 'Photo sample', 'slug' => 'photo-sample', 'category_id' => $category->id, 'variants' => ['new-1' => ['sku' => 'PHOTO-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000, 'is_active' => 1]]];
-        $this->post(route('admin.products.store'), $payload + ['images' => [UploadedFile::fake()->image('cover.jpg')]])->assertRedirect();
+        $this->post(route('admin.products.store'), $payload + ['images' => [UploadedFile::fake()->image('cover.jpg', 1200, 1500)]])->assertRedirect();
         $image = Product::where('slug', 'photo-sample')->firstOrFail()->images()->firstOrFail();
         Storage::disk('public')->assertExists($image->path);
         $this->assertSame('jpg', pathinfo($image->path, PATHINFO_EXTENSION));
+        $this->assertSame(1200, $image->width);
+        $this->assertSame(1500, $image->height);
+        Storage::disk('public')->assertExists(app(ImageVariantService::class)->variantPath($image->path, 400));
+        Storage::disk('public')->assertExists(app(ImageVariantService::class)->variantPath($image->path, 800));
     }
 
     public function test_category_hierarchy_rejects_cycles(): void

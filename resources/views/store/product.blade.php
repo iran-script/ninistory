@@ -1,5 +1,5 @@
 @extends('layouts.store')
-@section('title', $product->name.' | نینی‌استوری')
+@section('title', $product->name.' | کیدوکی')
 @section('content')
 @php
     $validImages = $product->images->filter(fn ($image) => \Illuminate\Support\Facades\Storage::disk('public')->exists($image->path));
@@ -12,6 +12,7 @@
         @if ($validImages->count() > 1)<div class="mt-3 flex gap-3 overflow-x-auto" aria-label="تصاویر محصول">@foreach ($validImages as $image)<button type="button" class="product-thumbnail h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white" data-gallery-image="{{ asset('storage/'.$image->path) }}" data-gallery-alt="{{ $image->alt_text ?: $product->name }}" aria-label="نمایش تصویر {{ $loop->iteration }}"><img class="h-full w-full object-contain" src="{{ asset('storage/'.$image->path) }}" alt="" loading="lazy"></button>@endforeach</div>@endif
     </div>
     <div class="md:py-4"><nav class="mb-5 text-sm text-[var(--color-muted)]"><a href="{{ route('home') }}">خانه</a> / <a href="{{ route('products.index') }}">محصولات</a> / {{ $product->category?->name }}</nav><h1 class="text-2xl font-extrabold text-[var(--color-wine)] md:text-4xl">{{ $product->name }}</h1><p class="mt-3 leading-8 text-[#6e6263]">{{ $product->description ?: $product->short_description }}</p>
+        @if($product->size_chart)<section class="mt-5 rounded-2xl bg-white p-4" aria-labelledby="size-guide-title"><h2 id="size-guide-title" class="font-bold">راهنمای اندازه</h2><div class="mt-3 overflow-x-auto"><table class="w-full min-w-[360px] text-right text-sm"><tbody>@foreach($product->size_chart as $row)<tr>@foreach((array) $row as $value)<td class="border-b p-2">{{ $value }}</td>@endforeach</tr>@endforeach</tbody></table></div><p class="mt-2 text-xs text-slate-500">اندازه‌ها باید بر اساس اندازه‌گیری واقعی محصول تأیید شوند و ممکن است اندکی تفاوت داشته باشند.</p></section>@endif
         <div class="mt-5 flex items-end gap-3"><p class="text-2xl font-extrabold text-[var(--color-action)]" data-variant-price>—</p><del class="text-sm text-[var(--color-muted)]" data-variant-compare></del></div>
         <form action="{{ route('cart.add') }}" method="post" class="mt-6 space-y-5">@csrf
             <div class="product-choice"><span class="block font-bold">رنگ</span><div class="mt-2 flex flex-wrap gap-2" role="group" aria-label="انتخاب رنگ">@foreach($colors as $color)<button type="button" class="choice-chip choice-chip--color" data-color="{{ $color->color_name }}" style="--swatch: {{ $color->color_hex ?: '#F6B8C8' }}">{{ $color->color_name }}</button>@endforeach</div></div>

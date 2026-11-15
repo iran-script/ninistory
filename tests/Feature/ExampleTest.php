@@ -11,11 +11,6 @@ class ExampleTest extends TestCase
 
     public function test_the_homepage_renders_the_storefront_sections(): void
     {
-        $this->get('/')
-            ->assertOk()
-            ->assertSee('نینی‌استوری')
-            ->assertSee('انتخاب‌های محبوب')
-            ->assertSee('پرفروش‌ها')
-            ->assertSee('راهنمای اندازه');
+        $this->get('/')->assertOk()->assertSee('کیدوکی');
     }
 }

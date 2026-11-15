@@ -49,6 +49,38 @@
             <input type="file" name="image" accept="image/jpeg,image/png,image/webp">
         </label>
 
+        <label>Primary search intent
+            <input name="primary_search_intent" value="{{ old('primary_search_intent', $category->primary_search_intent) }}">
+        </label>
+        <label>Editorial review
+            <select name="editorial_review_status"><option value="draft" @selected(old('editorial_review_status', $category->editorial_review_status) === 'draft')>Draft</option><option value="needs_review" @selected(old('editorial_review_status', $category->editorial_review_status) === 'needs_review')>Needs review</option><option value="approved" @selected(old('editorial_review_status', $category->editorial_review_status) === 'approved')>Approved</option></select>
+        </label>
+        <label class="admin-span">Buying guide
+            <textarea name="buying_guide" rows="5">{{ old('buying_guide', $category->buying_guide) }}</textarea>
+        </label>
+        <label class="admin-span">FAQs JSON
+            <textarea name="faqs" rows="4" placeholder='[{"question":"...","answer":"..."}]'>{{ old('faqs', $category->faqs ? json_encode($category->faqs, JSON_UNESCAPED_UNICODE) : '') }}</textarea>
+        </label>
+        <label class="admin-span">Related category IDs JSON
+            <input name="related_category_ids" value="{{ old('related_category_ids', $category->related_category_ids ? json_encode($category->related_category_ids) : '') }}">
+        </label>
+
+        <label>Size guide title
+            <input name="size_guide_title" value="{{ old('size_guide_title', $category->sizeGuides->first()?->title) }}">
+        </label>
+        <label>Publish size guide
+            <input type="checkbox" name="size_guide_is_published" value="1" @checked(old('size_guide_is_published', $category->sizeGuides->first()?->is_published))>
+        </label>
+        <label class="admin-span">Size guide instructions
+            <textarea name="size_guide_instructions" rows="2">{{ old('size_guide_instructions', $category->sizeGuides->first()?->instructions) }}</textarea>
+        </label>
+        <label class="admin-span">Size guide rows JSON
+            <textarea name="size_guide_rows" rows="4" placeholder='[{"سایز":"۳ سال","قد":"۹۸"}]'>{{ old('size_guide_rows', $category->sizeGuides->first()?->rows ? json_encode($category->sizeGuides->first()->rows, JSON_UNESCAPED_UNICODE) : '') }}</textarea>
+        </label>
+        <label class="admin-span">Size guide notes
+            <textarea name="size_guide_notes" rows="2">{{ old('size_guide_notes', $category->sizeGuides->first()?->notes) }}</textarea>
+        </label>
+
         @if ($category->image_path)
             <div class="admin-span flex flex-wrap items-center gap-4">
                 <img class="h-32 w-48 rounded-2xl object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($category->image_path) }}" alt="{{ $category->name }}">

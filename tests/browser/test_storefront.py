@@ -14,7 +14,7 @@ def screenshot(page: Page, name: str) -> None:
 
 def test_storefront_responsive_smoke(page: Page) -> None:
     page.goto("http://127.0.0.1:8123/", wait_until="networkidle")
-    expect(page).to_have_title(re.compile("نینی"))
+    expect(page).to_have_title(re.compile("کیدوکی"))
     expect(page.locator("main")).to_contain_text("پرفروش")
     expect(page.locator("img").first).to_be_visible()
     screenshot(page, "homepage-desktop.png")
@@ -40,8 +40,10 @@ def test_guest_purchase_and_mock_payment(page: Page) -> None:
 
     expect(page.locator("[data-variant-select]")).to_be_visible()
     expect(page.locator("[data-variant-price]")).not_to_have_text("—")
-    page.locator("[data-size]").first.click()
-    page.locator('input[name="quantity"]').fill("2")
+    available_variant_value = page.locator("[data-variant-select] option").evaluate_all("options => options.find(option => option.dataset.active === '1' && Number(option.dataset.stock) > 0)?.value")
+    assert available_variant_value, "fixture must provide an active in-stock variant"
+    page.locator("[data-variant-select]").select_option(available_variant_value)
+    page.locator('input[name="quantity"]').fill("1")
     page.get_by_role("button", name="افزودن به سبد خرید").click()
     page.wait_for_load_state("networkidle")
     expect(page).to_have_url(re.compile(r"/cart"))
@@ -93,3 +95,32 @@ def test_browser_seo_smoke(page: Page) -> None:
 
     page.goto("http://127.0.0.1:8123/sitemap.xml", wait_until="networkidle")
     expect(page.locator("body")).to_contain_text("sitemapindex")
+
+
+def test_live_search_autocomplete_keyboard_and_empty_state(page: Page) -> None:
+    page.goto("http://127.0.0.1:8123/products", wait_until="networkidle")
+    product_name = page.locator(".product-card h3").first.inner_text()
+    query = product_name[:3]
+    search = page.locator("#desktop-search")
+    search.fill(query)
+    expect(page.locator("#desktop-search-results")).to_be_visible()
+    expect(page.locator("#desktop-search-results [role='option']").last).to_be_visible()
+    search.press("Escape")
+    expect(page.locator("#desktop-search-results")).to_be_hidden()
+
+    search.fill("query-with-no-matching-products-xyz")
+    expect(page.locator("#desktop-search-results")).to_contain_text("محصولی پیدا نشد")
+
+
+def test_official_kidoki_logo_assets_are_served(page: Page) -> None:
+    page.goto("http://127.0.0.1:8123/", wait_until="networkidle")
+    for asset_url in [
+        "/brand-logo.webp",
+        "/images/brand/logo-512.webp",
+        "/images/brand/favicon-32.png",
+        "/images/brand/apple-touch-icon.png",
+    ]:
+        response = page.request.get(f"http://127.0.0.1:8123{asset_url}")
+        assert response.status == 200, asset_url
+
+    assert page.locator("img[alt='نشان کیدوکی']").count() >= 2

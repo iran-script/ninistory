@@ -5,12 +5,16 @@ use App\Http\Controllers\Admin\ArticleController as AdminArticleController;
 use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\BannerController as AdminBannerController;
 use App\Http\Controllers\Admin\CategoryController as AdminCategoryController;
+use App\Http\Controllers\Admin\ContentPageController as AdminContentPageController;
+use App\Http\Controllers\Admin\ContentReadinessController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\InventoryController as AdminInventoryController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PickupLocationController;
 use App\Http\Controllers\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Admin\ProductImportController;
+use App\Http\Controllers\Admin\SeoAuditController;
 use App\Http\Controllers\Admin\SeoSettingsController;
 use App\Http\Controllers\Admin\ShippingMethodController;
 use App\Http\Controllers\ArticleController;
@@ -19,6 +23,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SeoController;
 use App\Http\Controllers\ShippingCheckoutController;
 use App\Http\Controllers\StorefrontController;
+use App\Models\ContentPage;
 use App\Models\Order;
 use App\Models\PickupLocation;
 use App\Models\ProductVariant;
@@ -30,6 +35,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 
 Route::get('/', [StorefrontController::class, 'home'])->name('home');
+Route::get('/search/autocomplete', [StorefrontController::class, 'autocomplete'])->middleware('throttle:search-autocomplete')->name('search.autocomplete');
 Route::get('/products', [StorefrontController::class, 'index'])->name('products.index');
 Route::get('/categories/{category:slug}', [StorefrontController::class, 'category'])->missing(function () {
     $redirect = SeoRedirect::where('source_path', request()->path())->first();
@@ -45,48 +51,57 @@ Route::get('/products/{product:slug}', [StorefrontController::class, 'show'])->m
 })->name('products.show');
 Route::get('/articles', [ArticleController::class, 'index'])->name('articles.index');
 Route::get('/articles/{article:slug}', [ArticleController::class, 'show'])->name('articles.show');
+Route::get('/info/{contentPage:slug}', function (ContentPage $contentPage) {
+    abort_unless($contentPage->status === 'published', 404);
+
+    return view('store.content-page', compact('contentPage'));
+})->name('content-pages.show');
 Route::get('/robots.txt', [SeoController::class, 'robots'])->name('seo.robots');
 Route::get('/sitemap.xml', [SeoController::class, 'index'])->name('seo.sitemap');
 Route::get('/sitemap-static.xml', [SeoController::class, 'static'])->name('seo.sitemap.static');
 Route::get('/sitemap-products.xml', [SeoController::class, 'products'])->name('seo.sitemap.products');
 Route::get('/sitemap-categories.xml', [SeoController::class, 'categories'])->name('seo.sitemap.categories');
 Route::get('/sitemap-articles.xml', [SeoController::class, 'articles'])->name('seo.sitemap.articles');
-Route::get('/cart', [StorefrontController::class, 'cart'])->name('cart');
-Route::post('/cart', [StorefrontController::class, 'addToCart'])->name('cart.add');
-Route::patch('/cart/{variant}', [StorefrontController::class, 'updateCart'])->name('cart.update');
-Route::delete('/cart/{variant}', [StorefrontController::class, 'removeFromCart'])->name('cart.remove');
-Route::get('/checkout', function () {
-    $key = session('checkout_key');
-    if (! $key) {
-        $key = (string) Str::uuid();
-        session(['checkout_key' => $key]);
-    }
+Route::middleware('private.cache')->group(function (): void {
+    Route::get('/cart', [StorefrontController::class, 'cart'])->name('cart');
+    Route::post('/cart', [StorefrontController::class, 'addToCart'])->name('cart.add');
+    Route::patch('/cart/{variant}', [StorefrontController::class, 'updateCart'])->name('cart.update');
+    Route::delete('/cart/{variant}', [StorefrontController::class, 'removeFromCart'])->name('cart.remove');
+    Route::get('/checkout', function () {
+        $key = session('checkout_key');
+        if (! $key) {
+            $key = (string) Str::uuid();
+            session(['checkout_key' => $key]);
+        }
 
-return view('store.checkout', ['checkoutKey' => $key, 'items' => collect(session('cart', []))->map(fn ($qty, $id) => ['variant' => ProductVariant::with('product')->find($id), 'quantity' => $qty])->filter(), 'provinces' => ShippingProvince::where('is_enabled', true)->with(['cities' => fn ($q) => $q->where('is_enabled', true)->orderBy('name')])->orderBy('name')->get(), 'shippingMethods' => ShippingMethod::where('is_enabled', true)->orderBy('sort_order')->get(), 'addresses' => auth()->check() ? auth()->user()->addresses()->orderByDesc('is_default')->get() : collect(), 'pickupLocations' => PickupLocation::where('is_enabled', true)->orderBy('sort_order')->get()]);
-})->name('checkout');
-Route::post('/checkout', [ShippingCheckoutController::class, 'store'])->middleware('throttle:checkout')->name('checkout.store');
-Route::get('/checkout/complete/{order:number}', function (Request $request, Order $order) {
-    $owned = $request->user()?->id !== null && $order->user_id === $request->user()->id;
-    $guestOwned = session('completed_order_number') === $order->number;
-    abort_unless($owned || $guestOwned, 404);
+        return response()->view('store.checkout', ['checkoutKey' => $key, 'items' => collect(session('cart', []))->map(fn ($qty, $id) => ['variant' => ProductVariant::with('product')->find($id), 'quantity' => $qty])->filter(), 'provinces' => ShippingProvince::where('is_enabled', true)->with(['cities' => fn ($q) => $q->where('is_enabled', true)->orderBy('name')])->orderBy('name')->get(), 'shippingMethods' => ShippingMethod::where('is_enabled', true)->orderBy('sort_order')->get(), 'addresses' => auth()->check() ? auth()->user()->addresses()->orderByDesc('is_default')->get() : collect(), 'pickupLocations' => PickupLocation::where('is_enabled', true)->orderBy('sort_order')->get()]);
+    })->name('checkout');
+    Route::post('/checkout', [ShippingCheckoutController::class, 'store'])->middleware('throttle:checkout')->name('checkout.store');
+    Route::get('/checkout/complete/{order:number}', function (Request $request, Order $order) {
+        $owned = $request->user()?->id !== null && $order->user_id === $request->user()->id;
+        $guestOwned = session('completed_order_number') === $order->number;
+        abort_unless($owned || $guestOwned, 404);
 
-    return view('store.checkout-complete', compact('order'));
-})->name('checkout.complete');
-Route::post('/payments/orders/{order}/initiate', [PaymentController::class, 'initiate'])->middleware('throttle:8,1')->name('payments.initiate');
-Route::get('/payments/{payment}/mock', [PaymentController::class, 'mockShow'])->middleware('signed')->name('payments.mock.show');
-Route::post('/payments/{payment}/mock', [PaymentController::class, 'mockAction'])->middleware(['signed', 'throttle:12,1'])->name('payments.mock.action');
-Route::get('/payments/{payment}/result', [PaymentController::class, 'result'])->middleware('signed')->name('payments.result');
-Route::middleware('auth')->prefix('orders')->name('orders.')->group(function () {
+        return response()->view('store.checkout-complete', compact('order'));
+    })->name('checkout.complete');
+});
+Route::middleware('private.cache')->group(function (): void {
+    Route::post('/payments/orders/{order}/initiate', [PaymentController::class, 'initiate'])->middleware('throttle:8,1')->name('payments.initiate');
+    Route::get('/payments/{payment}/mock', [PaymentController::class, 'mockShow'])->middleware('signed')->name('payments.mock.show');
+    Route::post('/payments/{payment}/mock', [PaymentController::class, 'mockAction'])->middleware(['signed', 'throttle:12,1'])->name('payments.mock.action');
+    Route::get('/payments/{payment}/result', [PaymentController::class, 'result'])->middleware('signed')->name('payments.result');
+});
+Route::middleware(['auth', 'private.cache'])->prefix('orders')->name('orders.')->group(function () {
     Route::get('/', [OrderHistoryController::class, 'index'])->name('index');
     Route::get('/{order}', [OrderHistoryController::class, 'show'])->name('show');
 });
-Route::middleware('auth')->prefix('account')->name('account.')->group(function () {
+Route::middleware(['auth', 'private.cache'])->prefix('account')->name('account.')->group(function () {
     Route::get('addresses', [AddressController::class, 'index'])->name('addresses.index');
     Route::post('addresses', [AddressController::class, 'store'])->name('addresses.store');
     Route::put('addresses/{address}', [AddressController::class, 'update'])->name('addresses.update');
     Route::delete('addresses/{address}', [AddressController::class, 'destroy'])->name('addresses.destroy');
 });
-Route::get('/order-access/{token}', [OrderHistoryController::class, 'guest'])->middleware('throttle:guest-order-access')->where('token', '[A-Fa-f0-9]{128}')->name('orders.guest');
+Route::get('/order-access/{token}', [OrderHistoryController::class, 'guest'])->middleware(['private.cache', 'throttle:guest-order-access'])->where('token', '[A-Fa-f0-9]{128}')->name('orders.guest');
 Route::get('/_local-preview/{path}', function (string $path) {
     abort_unless(app()->environment(['local', 'testing']), 404);
     abort_unless(str_starts_with($path, 'images/'), 404);
@@ -102,15 +117,26 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('login', [AdminAuthController::class, 'create'])->name('login');
         Route::post('login', [AdminAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     });
-    Route::middleware(['auth', 'admin'])->group(function () {
+    Route::middleware(['auth', 'admin', 'private.cache'])->group(function () {
         Route::post('logout', [AdminAuthController::class, 'destroy'])->name('logout');
         Route::get('/', AdminDashboardController::class)->name('dashboard');
         Route::resource('categories', AdminCategoryController::class)->except(['show']);
         Route::resource('banners', AdminBannerController::class)->except(['show']);
         Route::resource('products', AdminProductController::class)->except(['show']);
+        Route::get('products/{product}/preview', [AdminProductController::class, 'preview'])->name('products.preview');
+        Route::post('products/{product}/prices/preview', [AdminProductController::class, 'previewPricing'])->name('products.prices.preview');
+        Route::post('products/{product}/prices', [AdminProductController::class, 'applyPricing'])->name('products.prices.apply');
+        Route::post('products/{product}/merchant-verification', [AdminProductController::class, 'verifyMerchant'])->name('products.merchant-verification');
+        Route::get('products-import', [ProductImportController::class, 'create'])->name('products.import');
+        Route::post('products-import/preview', [ProductImportController::class, 'preview'])->name('products.import.preview');
+        Route::post('products-import', [ProductImportController::class, 'store'])->name('products.import.store');
         Route::resource('articles', AdminArticleController::class)->except(['show']);
         Route::get('articles/{article}/preview', [AdminArticleController::class, 'preview'])->name('articles.preview');
         Route::get('seo', [SeoSettingsController::class, 'edit'])->name('seo.edit');
+        Route::get('seo/audit', SeoAuditController::class)->name('seo.audit');
+        Route::get('content-readiness', ContentReadinessController::class)->name('content-readiness');
+        Route::get('content-pages/{slug}/edit', [AdminContentPageController::class, 'edit'])->name('content-pages.edit');
+        Route::put('content-pages/{slug}', [AdminContentPageController::class, 'update'])->name('content-pages.update');
         Route::put('seo', [SeoSettingsController::class, 'update'])->name('seo.update');
         Route::get('inventory', [AdminInventoryController::class, 'index'])->name('inventory.index');
         Route::post('inventory/{variant}/receive', [AdminInventoryController::class, 'receive'])->name('inventory.receive');
@@ -148,6 +174,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('orders/{order}/returns/{return}/inspect', [AdminOrderController::class, 'inspectReturn'])->name('orders.returns.inspect');
         Route::post('orders/{order}/returns/{return}/restock', [AdminOrderController::class, 'restockReturn'])->name('orders.returns.restock');
         Route::delete('products/{product}/images/{image}', [AdminProductController::class, 'destroyImage'])->name('products.images.destroy');
+        Route::post('products/{product}/images/{image}/cover', [AdminProductController::class, 'setCover'])->name('products.images.cover');
+        Route::delete('products/{product}/variants/{variant}', [AdminProductController::class, 'destroyVariant'])->name('products.variants.destroy');
         Route::patch('variants/{variant}/stock', [AdminProductController::class, 'stock'])->name('variants.stock');
     });
 });

@@ -9,6 +9,14 @@
 
 ## About Laravel
 
+## Kidoki
+
+This application is the Kidoki children's clothing ecommerce storefront. The customer-facing brand is **Kidoki / کیدوکی**, serving customers across Iran. Public production canonicals use `https://kidoki.ir` only when `APP_ENV=production`; local and staging environments retain their configured local URL and remain `noindex` by default.
+
+Before production indexing is enabled, complete real product photography, policies, contact details, DNS/HTTPS, and Search Console verification. The current payment gateway remains mock-only for development.
+
+Performance evidence and the preserved Phase 5.4 Lighthouse baseline/after reports are documented in `docs/performance/`. Field Core Web Vitals must be collected after public launch through PageSpeed Insights, Search Console, or an approved RUM setup.
+
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
 - [Simple, fast routing engine](https://laravel.com/docs/routing).

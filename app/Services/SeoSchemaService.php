@@ -16,9 +16,7 @@ class SeoSchemaService
         if ($images) {
             $data['image'] = $images;
         }
-        if ($product->brand) {
-            $data['brand'] = ['@type' => 'Brand', 'name' => $product->brand];
-        }
+        $data['brand'] = ['@type' => 'Brand', 'name' => $product->brand && ! str_contains($product->brand, 'نینی') ? $product->brand : config('seo.brand_name')];
         if ($variants->count() > 1) {
             $data['productGroupID'] = $product->sku ?: 'product-'.$product->id;
             $data['variesBy'] = ['https://schema.org/size', 'https://schema.org/color'];
@@ -38,12 +36,21 @@ class SeoSchemaService
 
     public function organization(): array
     {
-        return ['@context' => 'https://schema.org', '@type' => 'Organization', 'name' => 'نینی‌استوری', 'url' => url('/')];
+        $url = app()->environment('production') ? config('seo.production_url').'/' : url('/');
+
+        return ['@context' => 'https://schema.org', '@type' => ['Organization', 'OnlineStore'], 'name' => config('seo.brand_name'), 'alternateName' => config('seo.brand_name_fa'), 'url' => $url, 'sameAs' => ['https://www.instagram.com/'.config('seo.instagram')], 'logo' => $url.'brand-logo.webp'];
+    }
+
+    public function website(): array
+    {
+        $url = app()->environment('production') ? config('seo.production_url').'/' : url('/');
+
+        return ['@context' => 'https://schema.org', '@type' => 'WebSite', 'name' => config('seo.brand_name'), 'alternateName' => config('seo.brand_name_fa'), 'url' => $url];
     }
 
     public function article(Article $article): array
     {
-        return ['@context' => 'https://schema.org', '@type' => 'Article', 'headline' => $article->title, 'description' => strip_tags($article->summary ?: $article->content), 'url' => route('articles.show', $article), 'datePublished' => $article->published_at?->toIso8601String(), 'dateModified' => $article->updated_at?->toIso8601String(), 'author' => ['@type' => 'Person', 'name' => $article->author?->name ?: 'نینی‌استوری']];
+        return ['@context' => 'https://schema.org', '@type' => 'Article', 'headline' => $article->title, 'description' => strip_tags($article->summary ?: $article->content), 'url' => route('articles.show', $article), 'datePublished' => $article->published_at?->toIso8601String(), 'dateModified' => $article->updated_at?->toIso8601String(), 'author' => ['@type' => 'Person', 'name' => $article->author?->name ?: config('seo.brand_name')]];
     }
 
     private function offer(int $toman, bool $available, string $sku, string $url): array

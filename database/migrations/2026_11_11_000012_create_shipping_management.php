@@ -5,7 +5,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('shipping_methods', function (Blueprint $table) {
@@ -42,10 +43,20 @@ return new class extends Migration {
         });
 
         Schema::create('shipping_provinces', function (Blueprint $table) {
-            $table->id(); $table->string('code', 20)->unique(); $table->string('name', 100); $table->boolean('is_enabled')->default(true); $table->timestamps();
+            $table->id();
+            $table->string('code', 20)->unique();
+            $table->string('name', 100);
+            $table->boolean('is_enabled')->default(true);
+            $table->timestamps();
         });
         Schema::create('shipping_cities', function (Blueprint $table) {
-            $table->id(); $table->foreignId('province_id')->constrained('shipping_provinces')->cascadeOnDelete(); $table->string('code', 40); $table->string('name', 100); $table->boolean('is_enabled')->default(true); $table->timestamps(); $table->unique(['province_id', 'code']);
+            $table->id();
+            $table->foreignId('province_id')->constrained('shipping_provinces')->cascadeOnDelete();
+            $table->string('code', 40);
+            $table->string('name', 100);
+            $table->boolean('is_enabled')->default(true);
+            $table->timestamps();
+            $table->unique(['province_id', 'code']);
         });
 
         Schema::table('addresses', function (Blueprint $table) {
@@ -81,7 +92,9 @@ return new class extends Migration {
         ];
         foreach ($locations as $province) {
             $provinceId = DB::table('shipping_provinces')->insertGetId(['code' => $province['code'], 'name' => $province['name'], 'created_at' => now(), 'updated_at' => now()]);
-            foreach ($province['cities'] as $city) DB::table('shipping_cities')->insert(['province_id' => $provinceId, 'code' => $city['code'], 'name' => $city['name'], 'created_at' => now(), 'updated_at' => now()]);
+            foreach ($province['cities'] as $city) {
+                DB::table('shipping_cities')->insert(['province_id' => $provinceId, 'code' => $city['code'], 'name' => $city['name'], 'created_at' => now(), 'updated_at' => now()]);
+            }
         }
     }
 
@@ -89,6 +102,9 @@ return new class extends Migration {
     {
         Schema::table('orders', fn (Blueprint $table) => $table->dropColumn(['shipping_method_code', 'shipping_method_name', 'shipping_rate_snapshot', 'shipping_address_snapshot']));
         Schema::table('addresses', fn (Blueprint $table) => $table->dropColumn(['nickname', 'building', 'province_code', 'city_code']));
-        Schema::dropIfExists('shipping_rates'); Schema::dropIfExists('shipping_methods'); Schema::dropIfExists('shipping_cities'); Schema::dropIfExists('shipping_provinces');
+        Schema::dropIfExists('shipping_rates');
+        Schema::dropIfExists('shipping_methods');
+        Schema::dropIfExists('shipping_cities');
+        Schema::dropIfExists('shipping_provinces');
     }
 };

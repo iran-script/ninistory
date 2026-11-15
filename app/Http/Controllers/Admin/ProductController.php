@@ -8,10 +8,14 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\SeoRedirect;
+use App\Services\ImageVariantService;
 use App\Services\InventoryService;
+use App\Services\ProductReadinessService;
+use App\Services\ProductVariantSkuService;
+use App\Services\SeoMetadataService;
+use App\Services\SeoSchemaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -19,14 +23,18 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $products = Product::with('category')->withCount('variants')->when($request->filled('q'), fn ($q) => $q->where(fn ($query) => $query->where('name', 'like', '%'.$request->input('q').'%')->orWhere('sku', 'like', '%'.$request->input('q').'%')->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', '%'.$request->input('q').'%'))))->when($request->filled('category_id'), fn ($q) => $q->where('category_id', $request->integer('category_id')))->when($request->input('status') === 'published', fn ($q) => $q->where('is_active', true))->when($request->input('status') === 'draft', fn ($q) => $q->where('is_active', false))->latest()->paginate(20)->withQueryString();
+        $products = Product::with(['category', 'images' => fn ($query) => $query->where('is_cover', true)->limit(1)])->withCount('variants')->when($request->filled('q'), fn ($q) => $q->where(fn ($query) => $query->where('name', 'like', '%'.$request->input('q').'%')->orWhere('sku', 'like', '%'.$request->input('q').'%')->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', '%'.$request->input('q').'%'))))->when($request->filled('category_id'), fn ($q) => $q->where('category_id', $request->integer('category_id')))->when($request->input('status') === 'published', fn ($q) => $q->where('is_active', true))->when($request->input('status') === 'draft', fn ($q) => $q->where('is_active', false))->when($request->input('demo') === 'yes', fn ($q) => $q->where('slug', 'like', config('demo_catalog.prefix').'%'))->when($request->input('demo') === 'no', fn ($q) => $q->where('slug', 'not like', config('demo_catalog.prefix').'%'))->when($request->input('photos') === 'missing', fn ($q) => $q->whereDoesntHave('images'))->when($request->input('stock') === 'low', fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereRaw('stock_quantity > reserved_quantity AND (stock_quantity - reserved_quantity) <= ?', [config('inventory.low_stock_threshold', 5)])))->latest()->paginate(20)->withQueryString();
+
+        if ($request->input('stock') === 'out') {
+            $products = Product::with(['category', 'images' => fn ($query) => $query->where('is_cover', true)->limit(1)])->withCount('variants')->whereHas('variants', fn ($variant) => $variant->where('is_active', true)->whereRaw('stock_quantity <= reserved_quantity'))->latest()->paginate(20)->withQueryString();
+        }
 
         return view('admin.products.index', ['products' => $products, 'categories' => Category::orderBy('name')->get()]);
     }
 
     public function create()
     {
-        return view('admin.products.form', ['product' => new Product, 'categories' => Category::where('is_active', true)->orderBy('name')->get()]);
+        return view('admin.products.form', ['product' => new Product, 'categories' => Category::where('is_active', true)->orderBy('name')->get(), 'readiness' => app(ProductReadinessService::class)->inspect(new Product)]);
     }
 
     public function store(Request $request)
@@ -47,7 +55,44 @@ class ProductController extends Controller
     {
         $product->load(['variants', 'images']);
 
-        return view('admin.products.form', ['product' => $product, 'categories' => Category::where('is_active', true)->orderBy('name')->get()]);
+        return view('admin.products.form', ['product' => $product, 'categories' => Category::where('is_active', true)->orderBy('name')->get(), 'readiness' => app(ProductReadinessService::class)->inspect($product)]);
+    }
+
+    public function preview(Product $product, SeoMetadataService $seo, SeoSchemaService $schemas)
+    {
+        $product->load(['variants', 'images', 'category']);
+
+        return view('store.product', [
+            'product' => $product,
+            'seo' => $seo->make($product->meta_title ?: $product->name.' | پیش‌نمایش کیدوکی', $product->meta_description ?: 'پیش‌نمایش خصوصی محصول کیدوکی', route('admin.products.preview', $product), 'noindex,nofollow'),
+            'schemas' => [$schemas->product($product)],
+            'isAdminPreview' => true,
+        ]);
+    }
+
+    public function previewPricing(Request $request, Product $product)
+    {
+        $data = $request->validate(['variant_ids' => ['required', 'array', 'min:1'], 'variant_ids.*' => ['integer', 'exists:product_variants,id'], 'price_toman' => ['required', 'integer', 'min:1', 'max:1000000000']]);
+        $variants = $product->variants()->whereIn('id', $data['variant_ids'])->get();
+        abort_unless($variants->count() === count($data['variant_ids']), 422);
+
+        return view('admin.products.price-preview', compact('product', 'variants', 'data'));
+    }
+
+    public function applyPricing(Request $request, Product $product)
+    {
+        $data = $request->validate(['variant_ids' => ['required', 'array', 'min:1'], 'variant_ids.*' => ['integer', 'exists:product_variants,id'], 'price_toman' => ['required', 'integer', 'min:1', 'max:1000000000']]);
+        $updated = $product->variants()->whereIn('id', $data['variant_ids'])->update(['price_toman' => $data['price_toman']]);
+
+        return redirect()->route('admin.products.edit', $product)->with('status', "قیمت {$updated} تنوع به‌روزرسانی شد.");
+    }
+
+    public function verifyMerchant(Request $request, Product $product)
+    {
+        $data = $request->validate(['decision' => ['required', 'in:approved,rejected,pending'], 'reason' => ['nullable', 'string', 'max:2000']]);
+        $product->update(['merchant_verification_status' => $data['decision'], 'merchant_verified_by' => $data['decision'] === 'approved' ? $request->user()->id : null, 'merchant_verified_at' => $data['decision'] === 'approved' ? now() : null, 'merchant_review_reason' => $data['reason'] ?? null]);
+
+        return back()->with('status', 'وضعیت بررسی merchant ذخیره شد.');
     }
 
     public function update(Request $request, Product $product)
@@ -72,9 +117,10 @@ class ProductController extends Controller
         if ($product->variants()->whereHas('orderItems')->exists()) {
             return back()->withErrors(['product' => 'محصول دارای سابقه سفارش است و حذف نمی‌شود. آن را پیش‌نویس کنید.']);
         }
-        DB::transaction(function () use ($product) {
+        $variants = app(ImageVariantService::class);
+        DB::transaction(function () use ($product, $variants) {
             foreach ($product->images as $image) {
-                Storage::disk('public')->delete($image->path);
+                $variants->delete($image->path);
             } $product->delete();
         });
 
@@ -84,9 +130,10 @@ class ProductController extends Controller
     public function destroyImage(Product $product, ProductImage $image)
     {
         abort_unless($image->product_id === $product->id, 404);
-        DB::transaction(function () use ($image, $product) {
+        $variants = app(ImageVariantService::class);
+        DB::transaction(function () use ($image, $product, $variants) {
             $wasCover = $image->is_cover;
-            Storage::disk('public')->delete($image->path);
+            $variants->delete($image->path);
             $image->delete();
             if ($wasCover && ($replacement = $product->images()->first())) {
                 $replacement->update(['is_cover' => true]);
@@ -94,6 +141,30 @@ class ProductController extends Controller
         });
 
         return back()->with('status', 'تصویر حذف شد.');
+    }
+
+    public function setCover(Product $product, ProductImage $image)
+    {
+        abort_unless($image->product_id === $product->id, 404);
+        DB::transaction(function () use ($product, $image): void {
+            $product->images()->update(['is_cover' => false]);
+            $image->update(['is_cover' => true]);
+        });
+
+        return back()->with('status', 'تصویر جلد انتخاب شد.');
+    }
+
+    public function destroyVariant(Product $product, ProductVariant $variant)
+    {
+        abort_unless($variant->product_id === $product->id, 404);
+        if ($variant->orderItems()->exists() || $variant->inventoryMovements()->exists() || $variant->reservations()->exists()) {
+            $variant->update(['is_active' => false, 'archived_at' => now()]);
+
+            return back()->with('status', 'این تنوع سابقه دارد و به‌صورت امن غیرفعال شد.');
+        }
+        $variant->delete();
+
+        return back()->with('status', 'تنوع حذف شد.');
     }
 
     public function stock(Request $request, ProductVariant $variant)
@@ -106,7 +177,7 @@ class ProductController extends Controller
 
     private function validateProduct(Request $request, ?Product $product = null): array
     {
-        $data = $request->validate(['category_id' => ['nullable', 'integer', 'exists:categories,id'], 'name' => ['required', 'string', 'max:180'], 'slug' => ['nullable', 'string', 'max:190', 'alpha_dash:ascii', 'unique:products,slug,'.($product?->id ?? 'NULL')], 'sku' => ['nullable', 'string', 'max:100', 'unique:products,sku,'.($product?->id ?? 'NULL')], 'short_description' => ['nullable', 'string', 'max:500'], 'description' => ['nullable', 'string', 'max:10000'], 'brand' => ['nullable', 'string', 'max:160'], 'material' => ['nullable', 'string', 'max:160'], 'care_instructions' => ['nullable', 'string', 'max:5000'], 'age_guidance' => ['nullable', 'string', 'max:160'], 'size_chart' => ['nullable', 'string', 'max:10000'], 'meta_title' => ['nullable', 'string', 'max:255'], 'meta_description' => ['nullable', 'string', 'max:320'], 'canonical_url' => ['nullable', 'url:http,https', 'max:500'], 'robots_directive' => ['nullable', 'in:index,follow,noindex,follow,noindex,nofollow'], 'seo_content' => ['nullable', 'string', 'max:10000'], 'is_active' => ['sometimes', 'boolean'], 'is_featured' => ['sometimes', 'boolean']]);
+        $data = $request->validate(['category_id' => ['nullable', 'integer', 'exists:categories,id'], 'name' => ['required', 'string', 'max:180'], 'slug' => ['nullable', 'string', 'max:190', 'alpha_dash:ascii', 'unique:products,slug,'.($product?->id ?? 'NULL')], 'sku' => ['nullable', 'string', 'max:100', 'unique:products,sku,'.($product?->id ?? 'NULL')], 'short_description' => ['nullable', 'string', 'max:500'], 'description' => ['nullable', 'string', 'max:10000'], 'brand' => ['nullable', 'string', 'max:160'], 'material' => ['nullable', 'string', 'max:160'], 'composition' => ['nullable', 'string', 'max:240'], 'fit_information' => ['nullable', 'string', 'max:5000'], 'season' => ['nullable', 'string', 'max:100'], 'selling_points' => ['nullable', 'string', 'max:5000'], 'care_instructions' => ['nullable', 'string', 'max:5000'], 'age_guidance' => ['nullable', 'string', 'max:160'], 'size_chart' => ['nullable', 'string', 'max:10000'], 'measured_dimensions' => ['nullable', 'string', 'max:10000'], 'content_review_status' => ['sometimes', 'in:draft,needs_review,approved'], 'meta_title' => ['nullable', 'string', 'max:255'], 'meta_description' => ['nullable', 'string', 'max:320'], 'canonical_url' => ['nullable', 'url:http,https', 'max:500'], 'robots_directive' => ['nullable', 'in:index,follow,noindex,follow,noindex,nofollow'], 'seo_content' => ['nullable', 'string', 'max:10000'], 'is_active' => ['sometimes', 'boolean'], 'is_featured' => ['sometimes', 'boolean']]);
         if (($data['is_active'] ?? false)) {
             $variants = $request->input('variants', []);
             $request->validate(['variants' => ['required', 'array', 'min:1']]);
@@ -118,6 +189,8 @@ class ProductController extends Controller
         $data['is_active'] = $request->boolean('is_active');
         $data['is_featured'] = $request->boolean('is_featured');
         $data['size_chart'] = filled($data['size_chart'] ?? null) ? json_decode($data['size_chart'], true, 512, JSON_THROW_ON_ERROR) : null;
+        $data['measured_dimensions'] = filled($data['measured_dimensions'] ?? null) ? json_decode($data['measured_dimensions'], true, 512, JSON_THROW_ON_ERROR) : null;
+        $data['content_review_status'] = $data['content_review_status'] ?? $product?->content_review_status ?? 'draft';
 
         return $data;
     }
@@ -125,28 +198,37 @@ class ProductController extends Controller
     private function saveVariants(Request $request, Product $product): void
     {
         foreach ($request->input('variants', []) as $id => $row) {
-            $row = validator($row, ['sku' => ['required', 'string', 'max:100', 'unique:product_variants,sku,'.$id], 'size' => ['required', 'string', 'max:40'], 'color_name' => ['required', 'string', 'max:80'], 'color_hex' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'], 'price_toman' => ['required', 'integer', 'min:1'], 'compare_at_price_toman' => ['nullable', 'integer', 'gt:price_toman'], 'is_active' => ['sometimes', 'boolean']])->validate();
+            $row = validator($row, ['sku' => ['nullable', 'string', 'max:100', 'unique:product_variants,sku,'.(is_numeric($id) ? $id : 'NULL')], 'size' => ['required', 'string', 'max:40'], 'color_name' => ['required', 'string', 'max:80'], 'color_hex' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'], 'price_toman' => ['required', 'integer', 'min:1'], 'compare_at_price_toman' => ['nullable', 'integer', 'gt:price_toman'], 'is_active' => ['sometimes', 'boolean']])->validate();
             $duplicate = $product->variants()->where('size', $row['size'])->where('color_name', $row['color_name'])->when(is_numeric($id), fn ($q) => $q->whereKeyNot($id))->exists();
             if ($duplicate) {
                 throw ValidationException::withMessages(['variants' => 'ترکیب رنگ و اندازه برای این محصول تکراری است.']);
             }
             $variant = $product->variants()->whereKey(is_numeric($id) ? $id : 0)->first();
             if ($variant) {
+                if (blank($row['sku'] ?? null)) {
+                    $row['sku'] = app(ProductVariantSkuService::class)->generate($product, $row['color_name'], $row['size']);
+                }
                 $variant->update(collect($row)->except(['stock_quantity'])->all() + ['is_active' => (bool) ($row['is_active'] ?? false)]);
 
                 continue;
             }
-            $product->variants()->create($row + ['stock_quantity' => 0, 'is_active' => (bool) ($row['is_active'] ?? false)]);
+            app(ProductVariantSkuService::class)->create($product, $row + ['stock_quantity' => 0, 'is_active' => (bool) ($row['is_active'] ?? false)]);
         }
     }
 
     private function saveImages(Request $request, Product $product): void
     {
         $request->validate(['images' => ['sometimes', 'array', 'max:6']]);
+        $variants = app(ImageVariantService::class);
         foreach ($request->file('images', []) as $index => $file) {
             $validated = validator(['image' => $file], ['image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']])->validate();
-            $path = $validated['image']->store('products/'.$product->id, 'public');
-            $product->images()->create(['path' => $path, 'alt_text' => $request->input("image_alt.$index", $product->name), 'caption' => $request->input("image_caption.$index"), 'sort_order' => $product->images()->count(), 'is_cover' => $product->images()->doesntExist()]);
+            $media = $variants->store($validated['image'], 'products/'.$product->id);
+            try {
+                $product->images()->create(['path' => $media['path'], 'width' => $media['width'], 'height' => $media['height'], 'alt_text' => $request->input("image_alt.$index", $product->name), 'caption' => $request->input("image_caption.$index"), 'sort_order' => $product->images()->count(), 'is_cover' => $product->images()->doesntExist()]);
+            } catch (\Throwable $exception) {
+                $variants->delete($media['path']);
+                throw $exception;
+            }
         }
     }
 

@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
-use App\Models\{Order, Product, User};
-use App\Services\{InventoryReservationService, OrderInventoryService, OrderWorkflowService};
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\User;
+use App\Services\InventoryReservationService;
+use App\Services\OrderInventoryService;
+use App\Services\OrderWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class OrderWorkflowTest extends TestCase
@@ -20,15 +23,18 @@ class OrderWorkflowTest extends TestCase
         $order = Order::create(['number' => (string) Str::ulid(), 'checkout_key' => (string) Str::uuid(), 'guest_access_token' => str_repeat('a', 128), 'recipient_name' => 'Test', 'phone' => '09120000000', 'address' => 'Tehran', 'postal_code' => '123', 'currency' => 'IRR', 'subtotal_toman' => 1000 * $quantity, 'status' => Order::PENDING_PAYMENT, 'payment_status' => Order::PAYMENT_PENDING, 'fulfillment_status' => Order::FULFILLMENT_AWAITING, 'shipment_status' => Order::SHIPMENT_NOT_SHIPPED]);
         $order->items()->create(['product_variant_id' => $variant->id, 'sku' => $variant->sku, 'product_name' => $product->name, 'size' => $variant->size, 'color_name' => $variant->color_name, 'unit_price_toman' => 1000, 'quantity' => $quantity, 'line_total_toman' => 1000 * $quantity]);
         app(InventoryReservationService::class)->reserveOrder($order, [['variant' => $variant, 'quantity' => $quantity]], $order->checkout_key);
+
         return $order->fresh(['items.variant']);
     }
 
     public function test_workflow_keeps_payment_fulfillment_and_shipment_independent_and_ship_is_idempotent(): void
     {
-        $order = $this->order(); $admin = User::factory()->create(['is_admin' => true]);
+        $order = $this->order();
+        $admin = User::factory()->create(['is_admin' => true]);
         app(OrderInventoryService::class)->confirmPayment($order);
         $workflow = app(OrderWorkflowService::class);
-        $workflow->startProcessing($order, $admin); $workflow->pack($order, $admin);
+        $workflow->startProcessing($order, $admin);
+        $workflow->pack($order, $admin);
         $workflow->ship($order, ['carrier' => 'پست', 'shipping_method' => 'عادی', 'tracking_code' => 'TRK-1'], $admin);
         $workflow->ship($order, ['carrier' => 'متفاوت', 'shipping_method' => 'متفاوت', 'tracking_code' => 'TRK-2'], $admin);
         $this->assertDatabaseCount('shipments', 1);
@@ -37,7 +43,8 @@ class OrderWorkflowTest extends TestCase
 
     public function test_paid_cancellation_sets_refund_obligation_without_restocking(): void
     {
-        $order = $this->order(); $admin = User::factory()->create(['is_admin' => true]);
+        $order = $this->order();
+        $admin = User::factory()->create(['is_admin' => true]);
         app(OrderInventoryService::class)->confirmPayment($order);
         $variant = $order->items->first()->variant;
         app(OrderWorkflowService::class)->cancel($order, $admin, 'درخواست مشتری');
@@ -49,7 +56,9 @@ class OrderWorkflowTest extends TestCase
 
     public function test_customer_order_detail_requires_owner_and_guest_token(): void
     {
-        $order = $this->order(); $owner = User::factory()->create(); $other = User::factory()->create();
+        $order = $this->order();
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
         $order->update(['user_id' => $owner->id]);
         $this->actingAs($other)->get(route('orders.show', $order))->assertNotFound();
         $this->get(route('orders.guest', str_repeat('a', 128)))->assertOk();
@@ -58,7 +67,9 @@ class OrderWorkflowTest extends TestCase
 
     public function test_unpaid_order_cancellation_releases_reservation_once(): void
     {
-        $order = $this->order(); $admin = User::factory()->create(['is_admin' => true]); $variant = $order->items->first()->variant;
+        $order = $this->order();
+        $admin = User::factory()->create(['is_admin' => true]);
+        $variant = $order->items->first()->variant;
         app(OrderWorkflowService::class)->cancel($order, $admin, 'عدم پرداخت');
         app(OrderWorkflowService::class)->cancel($order, $admin, 'تکراری');
         $this->assertSame(0, $variant->fresh()->reserved_quantity);
