@@ -3,36 +3,74 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>@yield('title', 'مدیریت کیدوکی')</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>@yield('title', 'مدیریت فروشگاه | NiniStory')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <style>
-        .admin{min-height:100vh;background:#faf7f7;color:#382b30}.admin-layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}.admin-side{background:#fff;border-left:1px solid #efded7;padding:22px;display:flex;flex-direction:column;gap:12px}.admin-side a{padding:10px 12px;border-radius:12px}.admin-side a:hover{background:#fdebf0}.admin-main{min-width:0;padding:28px clamp(16px,4vw,56px)}.admin-card{background:white;border:1px solid #efded7;border-radius:18px;padding:20px;box-shadow:0 4px 14px #6b4f4f0b}.admin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.admin-table{width:100%;border-collapse:collapse}.admin-table th,.admin-table td{text-align:right;padding:12px;border-bottom:1px solid #f1e8e7}.admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.admin-form label{display:grid;gap:6px}.admin-form input,.admin-form select,.admin-form textarea{border:1px solid #dfd0d0;border-radius:10px;padding:10px;background:white}.admin-span{grid-column:1/-1}.admin-button{display:inline-flex;padding:10px 16px;border-radius:12px;background:#c92e70;color:white;font-weight:700}.admin-button--muted{background:#6b4f4f}.admin-alert{padding:12px;border-radius:12px;background:#d8efe3;margin-bottom:16px}.admin-errors{background:#fde5e8;color:#8c2343}.admin-actions{display:flex;gap:8px;align-items:center}.admin-actions form{display:inline}.admin-variants{width:100%;border-collapse:collapse}.admin-variants th,.admin-variants td{padding:8px;border-bottom:1px solid #eee}.admin-variants input{width:100%;border:1px solid #dfd0d0;border-radius:8px;padding:8px}.admin-table-wrap{overflow-x:auto}@media(max-width:850px){.admin-layout{grid-template-columns:1fr}.admin-side{flex-direction:row;overflow:auto;border:0;border-bottom:1px solid #efded7;padding:10px}.admin-side h2,.admin-side form{display:none}.admin-side a{white-space:nowrap}.admin-main{padding:18px 14px}.admin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-form{grid-template-columns:1fr}.admin-span{grid-column:auto}}
-    </style>
+    @stack('styles')
 </head>
 <body class="admin font-sans">
 <div class="admin-layout">
-    <aside class="admin-side">
-        <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3"><img src="{{ asset('images/brand/logo-512.webp') }}" alt="نشان کیدوکی" width="52" height="52" decoding="async"><span class="text-xl font-extrabold text-[var(--color-wine)]">Kidoki Admin</span></a>
-        <a href="{{ route('admin.dashboard') }}">داشبورد</a>
-        <a href="{{ route('admin.categories.index') }}">دسته‌بندی‌ها</a>
-        <a href="{{ route('admin.banners.index') }}">مدیریت بنرها</a>
-        <a href="{{ route('admin.products.index') }}">محصولات</a>
-        <a href="{{ route('admin.articles.index') }}">مجله و مقالات</a>
-        <a href="{{ route('admin.seo.edit') }}">مدیریت سئو</a>
-        <a href="{{ route('admin.seo.audit') }}">ممیزی محتوای سئو</a>
-        <a href="{{ route('admin.content-readiness') }}">آمادگی محتوای فروشگاه</a>
-        <a href="{{ route('admin.inventory.index') }}">مدیریت موجودی</a>
-        <a href="{{ route('admin.inventory.reservations') }}">رزروهای موجودی</a>
-        <a href="{{ route('admin.payments.index') }}">پرداخت‌ها</a>
-        <form method="post" action="{{ route('admin.logout') }}">@csrf<button class="admin-button admin-button--muted">خروج</button></form>
+    <aside class="admin-side" id="admin-sidebar" aria-label="ناوبری مدیریت">
+        <a href="{{ route('admin.dashboard') }}" class="admin-brand">
+            <span class="admin-brand__mark" aria-hidden="true">N</span>
+            <span><strong>NiniStory</strong><small>پنل مدیریت فروشگاه</small></span>
+        </a>
+        <p class="admin-side__caption">مدیریت فروشگاه</p>
+        <nav class="admin-nav">
+            <a href="{{ route('admin.dashboard') }}" @class(['is-active' => request()->routeIs('admin.dashboard')])><span class="admin-nav__icon" aria-hidden="true">⌂</span>داشبورد</a>
+            <p class="admin-nav__group">کاتالوگ</p>
+            <a href="{{ route('admin.products.index') }}" @class(['is-active' => request()->routeIs('admin.products.*')])><span class="admin-nav__icon" aria-hidden="true">◇</span>محصولات</a>
+            <a href="{{ route('admin.categories.index') }}" @class(['is-active' => request()->routeIs('admin.categories.*')])><span class="admin-nav__icon" aria-hidden="true">▱</span>دسته‌بندی‌ها</a>
+            <a href="{{ route('admin.inventory.index') }}" @class(['is-active' => request()->routeIs('admin.inventory.*') || request()->routeIs('admin.variants.*')])><span class="admin-nav__icon" aria-hidden="true">⬡</span>موجودی و انبار</a>
+            <p class="admin-nav__group">سفارش و محتوا</p>
+            <a href="{{ route('admin.orders.index') }}" @class(['is-active' => request()->routeIs('admin.orders.*')])><span class="admin-nav__icon" aria-hidden="true">▣</span>سفارش‌ها</a>
+            <a href="{{ route('admin.articles.index') }}" @class(['is-active' => request()->routeIs('admin.articles.*')])><span class="admin-nav__icon" aria-hidden="true">▤</span>مجله و مقالات</a>
+            <a href="{{ route('admin.banners.index') }}" @class(['is-active' => request()->routeIs('admin.banners.*')])><span class="admin-nav__icon" aria-hidden="true">▧</span>بنرهای فروشگاه</a>
+            <p class="admin-nav__group">تنظیمات</p>
+            <a href="{{ route('admin.payments.index') }}" @class(['is-active' => request()->routeIs('admin.payments.*')])><span class="admin-nav__icon" aria-hidden="true">◈</span>پرداخت‌ها</a>
+            <a href="{{ route('admin.seo.edit') }}" @class(['is-active' => request()->routeIs('admin.seo.*')])><span class="admin-nav__icon" aria-hidden="true">⚙</span>تنظیمات سئو</a>
+            <a href="{{ route('admin.content-readiness') }}" @class(['is-active' => request()->routeIs('admin.content-readiness')])><span class="admin-nav__icon" aria-hidden="true">✓</span>آمادگی محتوا</a>
+        </nav>
+        <div class="admin-side__club"><span>♛</span><div><strong>NiniStory Club</strong><small>باشگاه مشتریان</small></div></div>
+        <form method="post" action="{{ route('admin.logout') }}" class="admin-side__logout">@csrf<button type="submit">خروج از پنل <span aria-hidden="true">↗</span></button></form>
     </aside>
-    <main class="admin-main">
-        @if(session('status'))<div class="admin-alert">{{ session('status') }}</div>@endif
-        @if($errors->any())
-            <div class="admin-alert admin-errors"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
-        @endif
-        @yield('content')
-    </main>
+
+    <div class="admin-workspace">
+        <header class="admin-topbar">
+            <button type="button" class="admin-menu-toggle" aria-label="باز کردن منو" aria-controls="admin-sidebar" aria-expanded="false">☰</button>
+            <form class="admin-global-search" method="get" action="{{ route('admin.products.index') }}" role="search">
+                <span aria-hidden="true">⌕</span><input name="q" value="{{ request()->routeIs('admin.products.*') ? request('q') : '' }}" placeholder="جستجو در نام محصول یا SKU..." aria-label="جستجوی محصولات و کد کالا">
+                <kbd>Ctrl K</kbd>
+            </form>
+            <div class="admin-topbar__actions">
+                <a class="admin-icon-button" href="{{ route('admin.inventory.index') }}" aria-label="هشدارهای موجودی">♧<i></i></a>
+                <div class="admin-profile"><span class="admin-profile__avatar">{{ mb_substr(auth()->user()->name, 0, 1) }}</span><span><strong>{{ auth()->user()->name }}</strong><small>مدیر فروشگاه</small></span><span aria-hidden="true">⌄</span></div>
+            </div>
+        </header>
+        <main class="admin-main">
+            @if (session('status'))<div class="admin-alert admin-alert--success" role="status"><span aria-hidden="true">✓</span>{{ session('status') }}</div>@endif
+            @if ($errors->any())<div class="admin-alert admin-alert--error" role="alert"><strong>لطفاً موارد زیر را بررسی کنید</strong><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+            @yield('content')
+        </main>
+    </div>
 </div>
+<script>
+(() => {
+    const toggle = document.querySelector('.admin-menu-toggle');
+    const sidebar = document.querySelector('#admin-sidebar');
+    toggle?.addEventListener('click', () => {
+        const open = sidebar.classList.toggle('is-open');
+        toggle.setAttribute('aria-expanded', String(open));
+    });
+    document.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            document.querySelector('.admin-global-search input')?.focus();
+        }
+        if (event.key === 'Escape') sidebar?.classList.remove('is-open');
+    });
+})();
+</script>
+@stack('scripts')
 </body>
 </html>

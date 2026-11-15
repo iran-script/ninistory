@@ -50,12 +50,18 @@ class AdminCatalogTest extends TestCase
         $this->actingAs(User::factory()->create(['is_admin' => true]));
         $category = Category::create(['name' => 'Girls', 'slug' => 'girls', 'is_active' => true, 'sort_order' => 1]);
         $payload = ['name' => 'Photo sample', 'slug' => 'photo-sample', 'category_id' => $category->id, 'variants' => ['new-1' => ['sku' => 'PHOTO-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000, 'is_active' => 1]]];
-        $this->post(route('admin.products.store'), $payload + ['images' => [UploadedFile::fake()->image('cover.jpg', 1200, 1500)]])->assertRedirect();
+        $this->post(route('admin.products.store'), $payload + [
+            'images' => [UploadedFile::fake()->image('cover.jpg', 1200, 1500)],
+            'image_alt' => [0 => 'نمای روبه‌رو'],
+            'image_caption' => [0 => 'نمای جلوی لباس'],
+        ])->assertRedirect();
         $image = Product::where('slug', 'photo-sample')->firstOrFail()->images()->firstOrFail();
         Storage::disk('public')->assertExists($image->path);
         $this->assertSame('jpg', pathinfo($image->path, PATHINFO_EXTENSION));
         $this->assertSame(1200, $image->width);
         $this->assertSame(1500, $image->height);
+        $this->assertSame('نمای روبه‌رو', $image->alt_text);
+        $this->assertSame('نمای جلوی لباس', $image->caption);
         Storage::disk('public')->assertExists(app(ImageVariantService::class)->variantPath($image->path, 400));
         Storage::disk('public')->assertExists(app(ImageVariantService::class)->variantPath($image->path, 800));
     }
@@ -85,6 +91,7 @@ class AdminCatalogTest extends TestCase
 
         $this->actingAs($customer)->patch(route('admin.variants.stock', $variant), ['quantity' => 8, 'reason' => 'unauthorized'])->assertForbidden();
         $this->actingAs($customer)->delete(route('admin.products.images.destroy', [$product, $image]))->assertForbidden();
+        $this->actingAs($customer)->post(route('admin.products.duplicate', $product))->assertForbidden();
         $this->assertSame(0, $variant->fresh()->stock_quantity);
         $this->assertDatabaseHas('product_images', ['id' => $image->id]);
     }
@@ -107,6 +114,8 @@ class AdminCatalogTest extends TestCase
             ->assertOk()
             ->assertSee('name="name"', false)
             ->assertSee('name="variants[0][sku]"', false)
+            ->assertSee('name="save_as_draft"', false)
+            ->assertSee('new-image-previews')
             ->assertSee('multipart/form-data', false);
     }
 
@@ -124,5 +133,39 @@ class AdminCatalogTest extends TestCase
             ->assertSee('name="name"', false)
             ->assertSee('EDITABLE-1')
             ->assertSee('name="quantity"', false);
+    }
+
+    public function test_admin_can_save_a_published_form_as_a_draft(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+
+        $this->post(route('admin.products.store'), [
+            'name' => 'پیش‌نویس امن', 'slug' => 'safe-draft', 'is_active' => 1, 'save_as_draft' => 1,
+            'variants' => ['new-1' => ['sku' => 'SAFE-DRAFT-1', 'size' => '۳ سال', 'color_name' => 'آبی', 'price_toman' => 1000, 'is_active' => 1]],
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('products', ['slug' => 'safe-draft', 'is_active' => false]);
+    }
+
+    public function test_product_duplication_copies_images_and_variants_without_copying_stock(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Original item', 'slug' => 'original-item', 'is_active' => true]);
+        $variant = $product->variants()->create(['sku' => 'ORIGINAL-1', 'size' => '4Y', 'color_name' => 'Pink', 'price_toman' => 2500, 'stock_quantity' => 7]);
+        Storage::disk('public')->put('products/'.$product->id.'/cover.jpg', 'image-bytes');
+        $product->images()->create(['path' => 'products/'.$product->id.'/cover.jpg', 'alt_text' => 'Pink item', 'caption' => 'Front view', 'sort_order' => 0, 'is_cover' => true]);
+
+        $response = $this->actingAs($admin)->post(route('admin.products.duplicate', $product));
+
+        $copy = Product::query()->where('id', '!=', $product->id)->with(['variants', 'images'])->firstOrFail();
+        $response->assertRedirect(route('admin.products.edit', $copy));
+        $this->assertFalse($copy->is_active);
+        $this->assertCount(1, $copy->variants);
+        $this->assertSame(0, $copy->variants->first()->stock_quantity);
+        $this->assertNotSame($variant->sku, $copy->variants->first()->sku);
+        $this->assertCount(1, $copy->images);
+        Storage::disk('public')->assertExists($copy->images->first()->path);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'is_active' => true]);
     }
 }

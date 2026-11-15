@@ -102,6 +102,10 @@ class Order extends Model
 
     public function getCreatedAtJalaliAttribute(): string
     {
+        if (! class_exists(\IntlDateFormatter::class)) {
+            return $this->created_at?->format('Y/m/d H:i') ?? '';
+        }
+
         $formatter = new \IntlDateFormatter('fa_IR@calendar=persian', \IntlDateFormatter::MEDIUM, \IntlDateFormatter::SHORT, config('app.timezone'));
 
         return $formatter->format($this->created_at);

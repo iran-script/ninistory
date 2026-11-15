@@ -16,6 +16,7 @@ use App\Services\SeoMetadataService;
 use App\Services\SeoSchemaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -56,6 +57,61 @@ class ProductController extends Controller
         $product->load(['variants', 'images']);
 
         return view('admin.products.form', ['product' => $product, 'categories' => Category::where('is_active', true)->orderBy('name')->get(), 'readiness' => app(ProductReadinessService::class)->inspect($product)]);
+    }
+
+    public function duplicate(Product $product)
+    {
+        $copy = DB::transaction(function () use ($product): Product {
+            $attributes = $product->only([
+                'category_id', 'short_description', 'description', 'brand', 'material', 'composition',
+                'fit_information', 'season', 'selling_points', 'care_instructions', 'age_guidance',
+                'size_chart', 'measured_dimensions', 'meta_title', 'meta_description', 'canonical_url',
+                'robots_directive', 'seo_content', 'content_review_status',
+            ]);
+            $attributes['name'] = $product->name.' (کپی)';
+            $attributes['slug'] = Str::limit($product->slug, 170, '').'-copy-'.Str::lower(Str::random(8));
+            $attributes['is_active'] = false;
+            $attributes['is_featured'] = false;
+
+            $copy = Product::create($attributes);
+            $skuService = app(ProductVariantSkuService::class);
+
+            foreach ($product->variants as $variant) {
+                $skuService->create($copy, [
+                    'size' => $variant->size,
+                    'color_name' => $variant->color_name,
+                    'color_hex' => $variant->color_hex,
+                    'price_toman' => $variant->price_toman,
+                    'compare_at_price_toman' => $variant->compare_at_price_toman,
+                    'stock_quantity' => 0,
+                    'is_active' => $variant->is_active,
+                ]);
+            }
+
+            $disk = Storage::disk('public');
+            $images = app(ImageVariantService::class);
+            foreach ($product->images as $image) {
+                if (! $disk->exists($image->path)) {
+                    continue;
+                }
+
+                $extension = pathinfo($image->path, PATHINFO_EXTENSION);
+                $newPath = 'products/'.$copy->id.'/'.Str::uuid().($extension ? '.'.$extension : '');
+                $disk->copy($image->path, $newPath);
+                foreach (config('performance.image_variant_widths', [400, 800, 1200]) as $width) {
+                    $sourceVariant = $images->variantPath($image->path, (int) $width);
+                    if ($disk->exists($sourceVariant)) {
+                        $disk->copy($sourceVariant, $images->variantPath($newPath, (int) $width));
+                    }
+                }
+
+                $copy->images()->create($image->only(['width', 'height', 'alt_text', 'caption', 'sort_order', 'is_cover']) + ['path' => $newPath]);
+            }
+
+            return $copy;
+        });
+
+        return redirect()->route('admin.products.edit', $copy)->with('status', 'پیش‌نویس محصول با تنوع‌ها و تصاویر ساخته شد؛ موجودی تنوع‌ها صفر است.');
     }
 
     public function preview(Product $product, SeoMetadataService $seo, SeoSchemaService $schemas)
@@ -178,7 +234,7 @@ class ProductController extends Controller
     private function validateProduct(Request $request, ?Product $product = null): array
     {
         $data = $request->validate(['category_id' => ['nullable', 'integer', 'exists:categories,id'], 'name' => ['required', 'string', 'max:180'], 'slug' => ['nullable', 'string', 'max:190', 'alpha_dash:ascii', 'unique:products,slug,'.($product?->id ?? 'NULL')], 'sku' => ['nullable', 'string', 'max:100', 'unique:products,sku,'.($product?->id ?? 'NULL')], 'short_description' => ['nullable', 'string', 'max:500'], 'description' => ['nullable', 'string', 'max:10000'], 'brand' => ['nullable', 'string', 'max:160'], 'material' => ['nullable', 'string', 'max:160'], 'composition' => ['nullable', 'string', 'max:240'], 'fit_information' => ['nullable', 'string', 'max:5000'], 'season' => ['nullable', 'string', 'max:100'], 'selling_points' => ['nullable', 'string', 'max:5000'], 'care_instructions' => ['nullable', 'string', 'max:5000'], 'age_guidance' => ['nullable', 'string', 'max:160'], 'size_chart' => ['nullable', 'string', 'max:10000'], 'measured_dimensions' => ['nullable', 'string', 'max:10000'], 'content_review_status' => ['sometimes', 'in:draft,needs_review,approved'], 'meta_title' => ['nullable', 'string', 'max:255'], 'meta_description' => ['nullable', 'string', 'max:320'], 'canonical_url' => ['nullable', 'url:http,https', 'max:500'], 'robots_directive' => ['nullable', 'in:index,follow,noindex,follow,noindex,nofollow'], 'seo_content' => ['nullable', 'string', 'max:10000'], 'is_active' => ['sometimes', 'boolean'], 'is_featured' => ['sometimes', 'boolean']]);
-        if (($data['is_active'] ?? false)) {
+        if (($data['is_active'] ?? false) && ! $request->boolean('save_as_draft')) {
             $variants = $request->input('variants', []);
             $request->validate(['variants' => ['required', 'array', 'min:1']]);
             if (! collect($variants)->contains(fn ($variant) => filter_var($variant['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN))) {
@@ -186,7 +242,7 @@ class ProductController extends Controller
             }
         }
         $data['slug'] = $data['slug'] ?: (Str::slug($data['name']) ?: 'product-'.Str::lower(Str::random(10)));
-        $data['is_active'] = $request->boolean('is_active');
+        $data['is_active'] = $request->boolean('is_active') && ! $request->boolean('save_as_draft');
         $data['is_featured'] = $request->boolean('is_featured');
         $data['size_chart'] = filled($data['size_chart'] ?? null) ? json_decode($data['size_chart'], true, 512, JSON_THROW_ON_ERROR) : null;
         $data['measured_dimensions'] = filled($data['measured_dimensions'] ?? null) ? json_decode($data['measured_dimensions'], true, 512, JSON_THROW_ON_ERROR) : null;
@@ -219,6 +275,7 @@ class ProductController extends Controller
     private function saveImages(Request $request, Product $product): void
     {
         $request->validate(['images' => ['sometimes', 'array', 'max:6']]);
+        $request->validate(['image_alt' => ['sometimes', 'array'], 'image_alt.*' => ['nullable', 'string', 'max:180'], 'image_caption' => ['sometimes', 'array'], 'image_caption.*' => ['nullable', 'string', 'max:180']]);
         $variants = app(ImageVariantService::class);
         foreach ($request->file('images', []) as $index => $file) {
             $validated = validator(['image' => $file], ['image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']])->validate();
@@ -236,13 +293,14 @@ class ProductController extends Controller
     {
         $order = $request->input('image_order', []);
         $alt = $request->input('image_alt', []);
+        $captions = $request->input('image_caption', []);
         if (! is_array($order)) {
             $order = [];
         }
         if (! is_array($alt)) {
             $alt = [];
         }
-        if ($order === [] && $alt === []) {
+        if ($order === [] && $alt === [] && $captions === []) {
             return;
         }
 
@@ -256,6 +314,11 @@ class ProductController extends Controller
         validator(['image_alt' => $alt], ['image_alt' => ['array'], 'image_alt.*' => ['nullable', 'string', 'max:180']])->validate();
         foreach ($alt as $id => $value) {
             $product->images()->whereKey($id)->update(['alt_text' => $value ?: $product->name]);
+        }
+        validator(['image_caption' => $captions], ['image_caption' => ['array'], 'image_caption.*' => ['nullable', 'string', 'max:180']])->validate();
+        abort_unless(count(array_diff(array_keys($captions), $validIds)) === 0, 422);
+        foreach ($captions as $id => $value) {
+            $product->images()->whereKey($id)->update(['caption' => $value]);
         }
     }
 }

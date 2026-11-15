@@ -148,7 +148,7 @@ class StorefrontController extends Controller
     {
         abort_unless($category->is_active, 404);
         $request->merge(['category' => $category->id]);
-        $view = $this->index($request);
+        $view = $this->index($request, app(ProductSearchService::class));
         $data = $view->getData();
         $data['category'] = $category->load(['parent', 'children']);
         $data['relatedCategories'] = Category::query()->whereIn('id', $category->related_category_ids ?: [])->where('is_active', true)->get();

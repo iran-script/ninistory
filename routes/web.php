@@ -123,6 +123,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('categories', AdminCategoryController::class)->except(['show']);
         Route::resource('banners', AdminBannerController::class)->except(['show']);
         Route::resource('products', AdminProductController::class)->except(['show']);
+        Route::post('products/{product}/duplicate', [AdminProductController::class, 'duplicate'])->name('products.duplicate');
         Route::get('products/{product}/preview', [AdminProductController::class, 'preview'])->name('products.preview');
         Route::post('products/{product}/prices/preview', [AdminProductController::class, 'previewPricing'])->name('products.prices.preview');
         Route::post('products/{product}/prices', [AdminProductController::class, 'applyPricing'])->name('products.prices.apply');

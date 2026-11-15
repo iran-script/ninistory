@@ -1,11 +1,12 @@
 @extends('admin.layout')
 
 @section('content')
-    @if ($product->exists)<a class="admin-button admin-button--muted mb-4" target="_blank" rel="nofollow" href="{{ route('admin.products.preview', $product) }}">پیش‌نمایش خصوصی</a>@endif
+    @if ($product->exists)<div class="admin-product-tools"><a class="admin-button admin-button--muted" target="_blank" rel="nofollow" href="{{ route('admin.products.preview', $product) }}">پیش‌نمایش واقعی محصول</a><form method="post" action="{{ route('admin.products.duplicate', $product) }}" onsubmit="return confirm('یک پیش‌نویس مستقل از این محصول ساخته شود؟ موجودی تنوع‌ها صفر خواهد بود.')">@csrf<button class="admin-button admin-button--soft" type="submit">ساخت کپی پیش‌نویس</button></form></div>@endif
     @if ($errors->any())<section class="admin-card admin-errors mb-5"><h2 class="font-bold">خطاهای فرم</h2><ul class="mt-2 list-disc pr-6">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></section>@endif
     <h1 class="mb-5 text-3xl font-extrabold">
         {{ $product->exists ? 'ویرایش محصول' : 'محصول تازه' }}
     </h1>
+    <nav class="admin-section-nav" aria-label="بخش‌های ویرایش محصول"><a href="#product-basic">اطلاعات پایه</a><a href="#product-images">تصاویر</a><a href="#product-variants">تنوع و موجودی</a><a href="#product-seo">انتشار و SEO</a></nav>
     @if ($product->exists)
         <section class="admin-card mb-5 border-r-4 border-amber-500">
             <h2 class="mb-2 text-xl font-bold">چک‌لیست آمادگی محصول</h2>
@@ -23,7 +24,7 @@
             @method('put')
         @endif
 
-        <div class="admin-span"><h2 class="text-xl font-bold">اطلاعات پایه و دسته‌بندی</h2></div>
+        <div class="admin-span"><h2 id="product-basic" class="admin-form-heading">اطلاعات پایه و دسته‌بندی</h2></div>
         <label>نام محصول
             <input required name="name" value="{{ old('name', $product->name) }}">
         </label>
@@ -52,7 +53,7 @@
         <label>راهنمای سن
             <input name="age_guidance" value="{{ old('age_guidance', $product->age_guidance) }}">
         </label>
-        <div class="admin-span"><h2 class="text-xl font-bold">توضیحات، ویژگی‌ها و SEO</h2></div>
+        <div class="admin-span"><h2 id="product-seo" class="admin-form-heading">توضیحات و نمایش در جستجو</h2></div>
         <label>عنوان SEO
             <input name="meta_title" value="{{ old('meta_title', $product->meta_title) }}">
         </label>
@@ -86,8 +87,9 @@
         <label><span>محصول ویژه</span>
             <input type="checkbox" name="is_featured" value="1" @checked(old('is_featured', $product->is_featured))>
         </label>
-        <label class="admin-span">تصاویر گالری
+        <label class="admin-span" id="product-images-section">تصاویر گالری <span class="admin-help">حداکثر ۶ تصویر، JPG / PNG / WebP و تا ۵ مگابایت</span>
             <input id="product-images" type="file" name="images[]" accept="image/jpeg,image/png,image/webp" multiple><progress id="image-upload-progress" class="hidden w-full" max="100" value="0"></progress><span id="image-upload-status" class="text-xs text-slate-500"></span>
+            <span id="new-image-previews" class="admin-image-previews" aria-live="polite"></span>
         </label>
 
         <div class="admin-span"><h2 class="text-xl font-bold">اطلاعات پارچه و اندازه‌گیری واقعی</h2></div>
@@ -124,6 +126,9 @@
                         <label class="text-xs">متن جایگزین
                             <input name="image_alt[{{ $image->id }}]" value="{{ old('image_alt.'.$image->id, $image->alt_text) }}">
                         </label>
+                        <label class="text-xs">زیرنویس تصویر
+                            <input name="image_caption[{{ $image->id }}]" value="{{ old('image_caption.'.$image->id, $image->caption) }}">
+                        </label>
                         <label class="text-xs">ترتیب
                             <input type="number" min="0" max="65535"
                                    name="image_order[{{ $image->id }}]" value="{{ $image->sort_order }}">
@@ -137,7 +142,7 @@
             </div>
         @endif
 
-        <div class="admin-span">
+        <div class="admin-span" id="product-variants">
             <h2 class="mb-3 text-xl font-bold">تنوع، قیمت و موجودی</h2>
             <h2 class="mb-3 text-xl font-bold">گونه‌ها</h2>
             <div class="admin-table-wrap">
@@ -177,7 +182,8 @@
         </div>
 
         <div class="admin-span">
-            <button class="admin-button">ذخیره محصول</button>
+            <button class="admin-button" type="submit">ذخیره تغییرات</button>
+            <button class="admin-button admin-button--soft" type="submit" name="save_as_draft" value="1">ذخیره به‌عنوان پیش‌نویس</button>
             <a class="admin-button admin-button--muted" href="{{ route('admin.products.index') }}">بازگشت</a>
         </div>
     </form>
@@ -227,3 +233,51 @@
 (()=>{const root=document.querySelector('#measurement-editor');if(!root)return;const head=document.querySelector('#measurement-head'),body=document.querySelector('#measurement-body'),hidden=document.querySelector('#measured-dimensions');const templates={set:['size','sleeve_length','shirt_length','waist_circumference','pants_rise','pants_length'],top:['size','sleeve_length','garment_length','shoulder_width'],pants:['size','waist_circumference','pants_rise','pants_length'],dress:['size','sleeve_length','shoulder_width','waist_circumference','garment_length'],jacket:['size','sleeve_length','shoulder_width','garment_length','waist_circumference'],custom:['size']};const labels={size:'سایز',sleeve_length:'قد آستین',shirt_length:'قد بلوز',waist_circumference:'دور کمر',pants_rise:'فاق شلوار',pants_length:'قد شلوار',shoulder_width:'سرشانه',garment_length:'قد لباس'};let cols=templates.set;let rows=[];try{rows=JSON.parse(root.dataset.measurements||'[]')}catch(e){};const normalize=v=>v.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));const render=()=>{head.innerHTML='<tr>'+cols.map(c=>'<th>'+labels[c]+'</th>').join('')+'<th></th></tr>';body.innerHTML=rows.map((row,i)=>'<tr>'+cols.map(c=>'<td><input class="w-24 rounded-lg border p-2" inputmode="decimal" data-row="'+i+'" data-col="'+c+'" value="'+(row[c]??'')+'"></td>').join('')+'<td><button type="button" data-remove="'+i+'" class="text-red-700">حذف</button></td></tr>').join('');hidden.value=JSON.stringify(rows);body.querySelectorAll('input').forEach(input=>input.addEventListener('input',()=>{rows[input.dataset.row][input.dataset.col]=normalize(input.value);hidden.value=JSON.stringify(rows)}));body.querySelectorAll('[data-remove]').forEach(button=>button.addEventListener('click',()=>{rows.splice(Number(button.dataset.remove),1);render()}))};document.querySelector('#apply-measurement-template').addEventListener('click',()=>{cols=templates[document.querySelector('#measurement-template').value];rows=rows.map(row=>Object.fromEntries(cols.map(c=>[c,row[c]??''])));render()});document.querySelector('#add-measurement-row').addEventListener('click',()=>{rows.push(Object.fromEntries(cols.map(c=>[c,''])));render()});render()})();
 </script><script>document.querySelectorAll('.gallery-item').forEach(item=>{item.querySelector('.gallery-up')?.addEventListener('click',()=>{const previous=item.previousElementSibling;if(previous?.classList.contains('gallery-item')){item.parentNode.insertBefore(item,previous);syncGallery()}});item.querySelector('.gallery-down')?.addEventListener('click',()=>{const next=item.nextElementSibling;if(next?.classList.contains('gallery-item')){item.parentNode.insertBefore(next,item);syncGallery()}});item.addEventListener('dragstart',event=>event.dataTransfer.setData('text/plain',item.dataset.imageId));item.addEventListener('dragover',event=>event.preventDefault());item.addEventListener('drop',event=>{event.preventDefault();const dragged=[...document.querySelectorAll('.gallery-item')].find(candidate=>candidate.dataset.imageId===event.dataTransfer.getData('text/plain'));if(dragged&&dragged!==item)item.parentNode.insertBefore(dragged,item);syncGallery()})});const syncGallery=()=>document.querySelectorAll('.gallery-item').forEach((item,index)=>{const input=item.querySelector('input[name^="image_order"]');if(input)input.value=index});</script>@endpush
 @if($product->exists)@push('scripts')<script>document.querySelector('#bulk-pricing')?.addEventListener('submit',event=>{const form=event.currentTarget;form.querySelectorAll('input[name="variant_ids[]"]').forEach(input=>{if(input.value==='')input.remove()});document.querySelectorAll('.bulk-variant:checked').forEach(box=>{const input=document.createElement('input');input.type='hidden';input.name='variant_ids[]';input.value=box.value;form.appendChild(input)});if(!form.querySelector('input[name="variant_ids[]"]')){event.preventDefault();alert('حداقل یک تنوع را انتخاب کنید.')}});</script>@endpush @endif
+@push('scripts')<script>
+(()=>{
+    const form=document.querySelector('.admin-form');
+    if(!form)return;
+    let changed=false;
+    form.addEventListener('input',()=>{changed=true});
+    form.addEventListener('change',()=>{changed=true});
+    form.addEventListener('submit',()=>{changed=false});
+    window.addEventListener('beforeunload',event=>{if(changed){event.preventDefault();event.returnValue=''}});
+    const imageInput=document.querySelector('#product-images');
+    const previews=document.querySelector('#new-image-previews');
+    const defaultAlt=@js($product->name ?: 'تصویر محصول');
+    imageInput?.addEventListener('change',()=>{
+        previews.replaceChildren();
+        [...imageInput.files].forEach((file,index)=>{
+            if(!file.type.startsWith('image/'))return;
+            const figure=document.createElement('figure');
+            const image=document.createElement('img');
+            image.src=URL.createObjectURL(file);
+            image.alt=file.name;
+            const caption=document.createElement('figcaption');
+            caption.textContent=file.name;
+            const altField=document.createElement('input');
+            altField.type='text';
+            altField.name=`image_alt[${index}]`;
+            altField.value=defaultAlt;
+            altField.setAttribute('aria-label','متن جایگزین تصویر '+(index+1));
+            const altLabel=document.createElement('span');
+            altLabel.textContent='متن جایگزین';
+            const captionField=document.createElement('input');
+            captionField.type='text';
+            captionField.name=`image_caption[${index}]`;
+            captionField.setAttribute('aria-label','زیرنویس تصویر '+(index+1));
+            const captionLabel=document.createElement('span');
+            captionLabel.textContent='زیرنویس';
+            const altWrap=document.createElement('div');
+            altWrap.className='admin-image-meta';
+            altWrap.append(altLabel,altField);
+            const captionWrap=document.createElement('div');
+            captionWrap.className='admin-image-meta';
+            captionWrap.append(captionLabel,captionField);
+            figure.append(image,caption,altWrap,captionWrap);
+            previews.append(figure);
+        });
+        changed=true;
+    });
+})();
+</script>@endpush
