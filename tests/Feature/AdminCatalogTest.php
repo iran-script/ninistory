@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\ImageVariantService;
@@ -10,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AdminCatalogTest extends TestCase
@@ -167,5 +169,117 @@ class AdminCatalogTest extends TestCase
         $this->assertCount(1, $copy->images);
         Storage::disk('public')->assertExists($copy->images->first()->path);
         $this->assertDatabaseHas('products', ['id' => $product->id, 'is_active' => true]);
+    }
+
+    public function test_complete_variant_matrix_preserves_ids_and_stock_and_archives_omitted_history(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Matrix item', 'slug' => 'matrix-item']);
+        $keep = $product->variants()->create(['sku' => 'MATRIX-KEEP', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 5]);
+        $excluded = $product->variants()->create(['sku' => 'MATRIX-EXCLUDE', 'size' => '50', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 2]);
+        $excluded->inventoryMovements()->create(['user_id' => $admin->id, 'quantity_delta' => 2, 'quantity_before' => 0, 'quantity_after' => 2, 'reason' => 'Initial stock', 'movement_type' => 'adjustment', 'physical_before' => 0, 'physical_after' => 2, 'reserved_before' => 0, 'reserved_after' => 0]);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), [
+            'name' => 'Matrix item', 'slug' => 'matrix-item', 'variants_complete' => 1,
+            'variants' => [$keep->id => ['sku' => 'MATRIX-KEEP', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1200, 'is_active' => 1]],
+        ])->assertRedirect();
+
+        $this->assertSame($keep->id, $product->variants()->where('sku', 'MATRIX-KEEP')->firstOrFail()->id);
+        $this->assertSame(5, $keep->fresh()->stock_quantity);
+        $this->assertDatabaseHas('product_variants', ['id' => $excluded->id, 'is_active' => false]);
+        $this->assertDatabaseHas('inventory_movements', ['product_variant_id' => $excluded->id]);
+    }
+
+    public function test_missing_or_invalid_variant_matrix_never_archives_existing_variants(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Safe item', 'slug' => 'safe-item']);
+        $variant = $product->variants()->create(['sku' => 'SAFE-ROW', 'size' => '45', 'color_name' => 'Blue', 'price_toman' => 1000]);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Safe item', 'slug' => 'safe-item', 'variants_complete' => 1, 'variants' => []])->assertSessionHasErrors('variants');
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Safe item', 'slug' => 'safe-item', 'variants_complete' => 1, 'variants' => [$variant->id => ['color_name' => 'Blue']]])->assertSessionHasErrors('variants.'.$variant->id.'.size');
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Safe item', 'slug' => 'safe-item', 'variants' => [$variant->id => ['color_name' => 'Blue', 'size' => '45', 'price_toman' => 1000]]])->assertSessionHasErrors('variants_complete');
+
+        $this->assertTrue((bool) $variant->fresh()->is_active);
+    }
+
+    public function test_malformed_or_partial_matrix_preserves_product_and_variants(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Stable item', 'slug' => 'stable-item']);
+        $variant = $product->variants()->create(['sku' => 'STABLE-ROW', 'size' => '45', 'color_name' => 'Blue', 'price_toman' => 1000]);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Changed', 'slug' => 'stable-item', 'variants' => 'broken'])->assertSessionHasErrors('variants_complete');
+        $this->assertSame('Stable item', $product->fresh()->name);
+        $this->assertTrue((bool) $variant->fresh()->is_active);
+
+        $this->put(route('admin.products.update', $product), ['name' => 'Basic edit', 'slug' => 'stable-item'])->assertRedirect();
+        $this->assertSame('Basic edit', $product->fresh()->name);
+        $this->assertTrue((bool) $variant->fresh()->is_active);
+    }
+
+    public function test_archiving_excluded_variant_keeps_active_reservation_and_inventory_history(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Reserved item', 'slug' => 'reserved-item']);
+        $keep = $product->variants()->create(['sku' => 'RES-KEEP', 'size' => '45', 'color_name' => 'Blue', 'price_toman' => 1000]);
+        $excluded = $product->variants()->create(['sku' => 'RES-OLD', 'size' => '50', 'color_name' => 'Blue', 'price_toman' => 1000, 'stock_quantity' => 3, 'reserved_quantity' => 1]);
+        $order = Order::create(['number' => (string) Str::ulid(), 'checkout_key' => (string) Str::uuid(), 'recipient_name' => 'Test', 'phone' => '09120000000', 'address' => 'Tehran', 'postal_code' => '123', 'currency' => 'IRR', 'subtotal_toman' => 1000, 'status' => Order::PENDING_PAYMENT]);
+        $order->items()->create(['product_variant_id' => $excluded->id, 'sku' => $excluded->sku, 'product_name' => $product->name, 'size' => $excluded->size, 'color_name' => $excluded->color_name, 'unit_price_toman' => 1000, 'quantity' => 1, 'line_total_toman' => 1000]);
+        $excluded->reservations()->create(['order_id' => $order->id, 'quantity' => 1, 'status' => 'active', 'expires_at' => now()->addHour(), 'idempotency_key' => 'reserved-matrix']);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => $product->name, 'slug' => $product->slug, 'variants_complete' => 1, 'variants' => [$keep->id => ['sku' => $keep->sku, 'size' => $keep->size, 'color_name' => $keep->color_name, 'price_toman' => 1000, 'is_active' => 1]]])->assertRedirect();
+
+        $this->assertDatabaseHas('product_variants', ['id' => $excluded->id, 'is_active' => false, 'stock_quantity' => 3, 'reserved_quantity' => 1]);
+        $this->assertDatabaseHas('stock_reservations', ['product_variant_id' => $excluded->id, 'status' => 'active']);
+        $this->assertDatabaseHas('order_items', ['product_variant_id' => $excluded->id]);
+    }
+
+    public function test_existing_image_can_be_assigned_to_a_variant_or_cleared(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Image set', 'slug' => 'image-set']);
+        $variant = $product->variants()->create(['sku' => 'IMAGE-PINK-45', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000]);
+        $image = $product->images()->create(['path' => 'products/1/pink.jpg', 'alt_text' => 'Pink', 'sort_order' => 0]);
+        Storage::disk('public')->put($image->path, 'image');
+
+        $payload = ['name' => 'Image set', 'slug' => 'image-set', 'image_color' => [$image->id => 'Pink'], 'image_variant' => [$image->id => $variant->id]];
+        $this->actingAs($admin)->put(route('admin.products.update', $product), $payload)->assertRedirect();
+        $this->assertDatabaseHas('product_images', ['id' => $image->id, 'color_name' => 'Pink', 'product_variant_id' => $variant->id]);
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Image set', 'slug' => 'image-set', 'image_color' => [$image->id => ''], 'image_variant' => [$image->id => '']])->assertRedirect();
+        $this->assertDatabaseHas('product_images', ['id' => $image->id, 'color_name' => null, 'product_variant_id' => null]);
+    }
+
+    public function test_new_upload_can_be_assigned_to_a_color_and_variant(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'New image item', 'slug' => 'new-image-item']);
+        $variant = $product->variants()->create(['sku' => 'NEW-IMAGE-PINK', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000]);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), [
+            'name' => $product->name, 'slug' => $product->slug,
+            'images' => [UploadedFile::fake()->image('pink.jpg')],
+            'image_color' => [0 => 'Pink'], 'image_variant' => [0 => $variant->id],
+        ])->assertRedirect();
+
+        $image = $product->fresh()->images()->firstOrFail();
+        $this->assertSame('Pink', $image->color_name);
+        $this->assertSame($variant->id, $image->product_variant_id);
+        Storage::disk('public')->assertExists($image->path);
+    }
+
+    public function test_image_assignment_rejects_another_products_variant_without_saving_product_changes(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Owned image', 'slug' => 'owned-image']);
+        $image = $product->images()->create(['path' => 'products/1/image.jpg', 'alt_text' => 'Image', 'sort_order' => 0]);
+        $otherProduct = Product::create(['name' => 'Other product', 'slug' => 'other-product']);
+        $otherVariant = $otherProduct->variants()->create(['sku' => 'OTHER-VARIANT', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000]);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Should roll back', 'slug' => $product->slug, 'image_variant' => [$image->id => $otherVariant->id]])->assertSessionHasErrors('image_variant.'.$image->id);
+        $this->assertSame('Owned image', $product->fresh()->name);
+        $this->assertNull($image->fresh()->product_variant_id);
     }
 }

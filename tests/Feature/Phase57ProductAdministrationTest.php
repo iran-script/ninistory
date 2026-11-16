@@ -37,7 +37,7 @@ class Phase57ProductAdministrationTest extends TestCase
         $admin = User::factory()->create(['is_admin' => true]);
         $category = Category::create(['name' => 'Girls', 'slug' => 'girls', 'is_active' => true]);
         $product = Product::create(['category_id' => $category->id, 'name' => 'Set', 'slug' => 'set', 'is_active' => false]);
-        $payload = ['name' => 'Set', 'slug' => 'set', 'category_id' => $category->id, 'variants' => ['new-a' => ['color_name' => 'Pink', 'size' => '45', 'price_toman' => 1000, 'is_active' => 1], 'new-b' => ['color_name' => 'Pink', 'size' => '45', 'price_toman' => 1000, 'is_active' => 1]]];
+        $payload = ['name' => 'Set', 'slug' => 'set', 'category_id' => $category->id, 'variants_complete' => 1, 'variants' => ['new-a' => ['color_name' => 'Pink', 'size' => '45', 'price_toman' => 1000, 'is_active' => 1], 'new-b' => ['color_name' => 'Pink', 'size' => '45', 'price_toman' => 1000, 'is_active' => 1]]];
 
         $this->actingAs($admin)->put(route('admin.products.update', $product), $payload)->assertSessionHasErrors('variants');
         $this->assertDatabaseCount('product_variants', 0);
@@ -93,7 +93,7 @@ class Phase57ProductAdministrationTest extends TestCase
         $variant = $product->variants()->firstOrFail();
         $this->assertStringStartsWith('KD-', $variant->sku);
         $this->actingAs($admin)->patch(route('admin.variants.stock', $variant), ['quantity' => 5, 'reason' => 'دریافت اولیه'])->assertRedirect();
-        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => $product->name, 'slug' => $product->slug, 'category_id' => $category->id, 'description' => $product->description, 'measured_dimensions' => json_encode([['size' => '45', 'shirt_length' => '38.5']], JSON_UNESCAPED_UNICODE), 'is_active' => 1, 'variants' => [$variant->id => ['sku' => $variant->sku, 'color_name' => $variant->color_name, 'size' => $variant->size, 'price_toman' => 150000, 'is_active' => 1]]])->assertRedirect();
+        $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => $product->name, 'slug' => $product->slug, 'category_id' => $category->id, 'description' => $product->description, 'measured_dimensions' => json_encode([['size' => '45', 'shirt_length' => '38.5']], JSON_UNESCAPED_UNICODE), 'is_active' => 1, 'variants_complete' => 1, 'variants' => [$variant->id => ['sku' => $variant->sku, 'color_name' => $variant->color_name, 'size' => $variant->size, 'price_toman' => 150000, 'is_active' => 1]]])->assertRedirect();
         $this->actingAs($admin)->get(route('admin.products.preview', $product))->assertOk()->assertSee('ست پاپیون دخترانه');
         $this->get(route('products.show', $product->fresh()))->assertOk()->assertSee('ست پاپیون دخترانه');
         $this->post(route('cart.add'), ['variant_id' => $variant->id, 'quantity' => 1])->assertRedirect();

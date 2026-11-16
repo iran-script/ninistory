@@ -126,8 +126,14 @@
                         <label class="text-xs">متن جایگزین
                             <input name="image_alt[{{ $image->id }}]" value="{{ old('image_alt.'.$image->id, $image->alt_text) }}">
                         </label>
+                        <label class="text-xs">رنگ تصویر
+                            <input name="image_color[{{ $image->id }}]" value="{{ old('image_color.'.$image->id, $image->color_name) }}">
+                        </label>
                         <label class="text-xs">زیرنویس تصویر
                             <input name="image_caption[{{ $image->id }}]" value="{{ old('image_caption.'.$image->id, $image->caption) }}">
+                        </label>
+                        <label class="text-xs">Variant image
+                            <select name="image_variant[{{ $image->id }}]"><option value="">General color image</option>@foreach($product->variants as $variant)<option value="{{ $variant->id }}" @selected(old('image_variant.'.$image->id, $image->product_variant_id) == $variant->id)>{{ $variant->color_name }} · {{ $variant->size }}</option>@endforeach</select>
                         </label>
                         <label class="text-xs">ترتیب
                             <input type="number" min="0" max="65535"
@@ -143,6 +149,7 @@
         @endif
 
         <div class="admin-span" id="product-variants">
+            <input type="hidden" name="variants_complete" value="1" disabled data-variants-complete>
             <h2 class="mb-3 text-xl font-bold">تنوع، قیمت و موجودی</h2>
             <h2 class="mb-3 text-xl font-bold">گونه‌ها</h2>
             <div class="admin-table-wrap">
@@ -158,7 +165,7 @@
                                 <td><input name="variants[{{ $id }}][price_toman]" required type="number" min="1" value="{{ data_get($variant, 'price_toman') }}"></td>
                                 <td><input name="variants[{{ $id }}][compare_at_price_toman]" type="number" min="1" value="{{ data_get($variant, 'compare_at_price_toman') }}"></td>
                                 <td><input name="variants[{{ $id }}][color_hex]" dir="ltr" value="{{ data_get($variant, 'color_hex') }}"></td>
-                                <td><input name="variants[{{ $id }}][is_active]" value="1" type="checkbox" @checked(data_get($variant, 'is_active', true))></td>
+                                <td><input name="variants[{{ $id }}][is_active]" value="1" type="checkbox" @checked(data_get($variant, 'is_active', true))>@if (is_numeric($id) && data_get($variant, 'updated_at'))<input type="hidden" name="variants[{{ $id }}][updated_at]" value="{{ \Illuminate\Support\Carbon::parse(data_get($variant, 'updated_at'))->toISOString() }}">@endif</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -237,6 +244,8 @@
 (()=>{
     const form=document.querySelector('.admin-form');
     if(!form)return;
+    const completeMarker=form.querySelector('[data-variants-complete]');
+    form.addEventListener('submit',()=>{if(completeMarker)completeMarker.disabled=false});
     let changed=false;
     form.addEventListener('input',()=>{changed=true});
     form.addEventListener('change',()=>{changed=true});
@@ -245,6 +254,7 @@
     const imageInput=document.querySelector('#product-images');
     const previews=document.querySelector('#new-image-previews');
     const defaultAlt=@js($product->name ?: 'تصویر محصول');
+    const imageVariants=@js($product->variants->map(fn ($variant) => ['id'=>$variant->id,'label'=>$variant->color_name.' · '.$variant->size])->values());
     imageInput?.addEventListener('change',()=>{
         previews.replaceChildren();
         [...imageInput.files].forEach((file,index)=>{
@@ -274,7 +284,22 @@
             const captionWrap=document.createElement('div');
             captionWrap.className='admin-image-meta';
             captionWrap.append(captionLabel,captionField);
-            figure.append(image,caption,altWrap,captionWrap);
+            const colorField=document.createElement('input');
+            colorField.name=`image_color[${index}]`;
+            colorField.placeholder='رنگ تصویر (مثلاً صورتی)';
+            colorField.setAttribute('aria-label','رنگ تصویر '+(index+1));
+            const colorWrap=document.createElement('div');
+            colorWrap.className='admin-image-meta';
+            colorWrap.append('رنگ',colorField);
+            const variantSelect=document.createElement('select');
+            variantSelect.name=`image_variant[${index}]`;
+            variantSelect.add(new Option('تصویر عمومی رنگ',''));
+            imageVariants.forEach((variant)=>variantSelect.add(new Option(variant.label,variant.id)));
+            const variantWrap=document.createElement('div');
+            variantWrap.className='admin-image-meta';
+            variantWrap.append('تنوع اختیاری',variantSelect);
+            variantSelect.addEventListener('change',()=>{const chosen=imageVariants.find((variant)=>String(variant.id)===variantSelect.value);if(chosen)colorField.value=chosen.label.split(' · ')[0]});
+            figure.append(image,caption,altWrap,captionWrap,colorWrap,variantWrap);
             previews.append(figure);
         });
         changed=true;

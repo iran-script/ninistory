@@ -15,6 +15,7 @@ use App\Services\ProductVariantSkuService;
 use App\Services\SeoMetadataService;
 use App\Services\SeoSchemaService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -41,13 +42,13 @@ class ProductController extends Controller
     public function store(Request $request)
     {
         $data = $this->validateProduct($request);
-        $product = DB::transaction(function () use ($data) {
+        $product = DB::transaction(function () use ($data, $request) {
             $product = Product::create($data);
-            $this->saveVariants(request(), $product);
+            $this->saveVariants($request, $product);
+            $this->saveImages($request, $product);
 
             return $product;
         });
-        $this->saveImages($request, $product);
 
         return redirect()->route('admin.products.edit', $product)->with('status', 'محصول ساخته شد.');
     }
@@ -157,10 +158,15 @@ class ProductController extends Controller
         $data = $this->validateProduct($request, $product);
         DB::transaction(function () use ($request, $data, $product) {
             $product->update($data);
-            $this->saveVariants($request, $product);
+            if ($request->exists('variants') && ! $request->exists('variants_complete')) {
+                throw ValidationException::withMessages(['variants_complete' => 'برای ذخیره جدول کامل تنوع‌ها، صفحه را دوباره بارگذاری و فرم را کامل ارسال کنید.']);
+            }
+            if ($request->exists('variants_complete')) {
+                $this->saveVariants($request, $product);
+            }
             $this->saveImageOrdering($request, $product);
+            $this->saveImages($request, $product);
         });
-        $this->saveImages($request, $product);
         if ($oldSlug !== $product->slug) {
             SeoRedirect::updateOrCreate(['source_path' => 'products/'.$oldSlug], ['target_url' => route('products.show', $product), 'status_code' => 301]);
         }
@@ -253,14 +259,38 @@ class ProductController extends Controller
 
     private function saveVariants(Request $request, Product $product): void
     {
-        foreach ($request->input('variants', []) as $id => $row) {
+        $submittedVariants = $request->input('variants', []);
+        if (! is_array($submittedVariants)) {
+            throw ValidationException::withMessages(['variants' => 'جدول تنوع‌ها معتبر نیست.']);
+        }
+        $rules = ['variants' => ['present', 'array'], 'variants_complete' => ['sometimes', 'accepted']];
+        foreach (['sku' => ['nullable', 'string', 'max:100'], 'size' => ['required', 'string', 'max:40'], 'color_name' => ['required', 'string', 'max:80'], 'color_hex' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'], 'price_toman' => ['required', 'integer', 'min:1', 'max:1000000000'], 'compare_at_price_toman' => ['nullable', 'integer', 'min:1', 'max:1000000000'], 'is_active' => ['sometimes', 'boolean'], 'updated_at' => ['nullable', 'date']] as $field => $fieldRules) {
+            $rules['variants.*.'.$field] = $fieldRules;
+        }
+        $request->validate($rules);
+        if ($submittedVariants === [] && $product->variants()->exists()) {
+            throw ValidationException::withMessages(['variants' => 'برای حفظ تنوع‌های فعلی، دست‌کم یک ردیف معتبر وارد کنید.']);
+        }
+        $keys = [];
+        foreach ($submittedVariants as $id => $row) {
+            if (! is_array($row) || (is_numeric($id) && ! $product->variants()->whereKey($id)->exists())) {
+                throw ValidationException::withMessages(['variants' => 'ردیف تنوع نامعتبر است.']);
+            }
             $row = validator($row, ['sku' => ['nullable', 'string', 'max:100', 'unique:product_variants,sku,'.(is_numeric($id) ? $id : 'NULL')], 'size' => ['required', 'string', 'max:40'], 'color_name' => ['required', 'string', 'max:80'], 'color_hex' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'], 'price_toman' => ['required', 'integer', 'min:1'], 'compare_at_price_toman' => ['nullable', 'integer', 'gt:price_toman'], 'is_active' => ['sometimes', 'boolean']])->validate();
+            $combinationKey = mb_strtolower(trim($row['color_name'])).'|'.mb_strtolower(trim($row['size']));
+            if (isset($keys[$combinationKey])) {
+                throw ValidationException::withMessages(['variants' => 'ترکیب رنگ و اندازه تکراری است.']);
+            }
+            $keys[$combinationKey] = true;
             $duplicate = $product->variants()->where('size', $row['size'])->where('color_name', $row['color_name'])->when(is_numeric($id), fn ($q) => $q->whereKeyNot($id))->exists();
             if ($duplicate) {
                 throw ValidationException::withMessages(['variants' => 'ترکیب رنگ و اندازه برای این محصول تکراری است.']);
             }
             $variant = $product->variants()->whereKey(is_numeric($id) ? $id : 0)->first();
             if ($variant) {
+                if (isset($submittedVariants[$id]['updated_at']) && $variant->updated_at?->toISOString() !== Carbon::parse($submittedVariants[$id]['updated_at'])->toISOString()) {
+                    throw ValidationException::withMessages(['variants' => 'اطلاعات تنوع تغییر کرده است؛ صفحه را تازه‌سازی و دوباره بررسی کنید.']);
+                }
                 if (blank($row['sku'] ?? null)) {
                     $row['sku'] = app(ProductVariantSkuService::class)->generate($product, $row['color_name'], $row['size']);
                 }
@@ -270,18 +300,45 @@ class ProductController extends Controller
             }
             app(ProductVariantSkuService::class)->create($product, $row + ['stock_quantity' => 0, 'is_active' => (bool) ($row['is_active'] ?? false)]);
         }
+
+        $submittedIds = collect(array_keys($submittedVariants))->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all();
+        if ($request->boolean('variants_complete')) {
+            $omitted = $product->variants()->whereNotIn('id', $submittedIds)->lockForUpdate()->get();
+            foreach ($omitted as $variant) {
+                $variant->update(['is_active' => false, 'archived_at' => now()]);
+            }
+        }
     }
 
     private function saveImages(Request $request, Product $product): void
     {
-        $request->validate(['images' => ['sometimes', 'array', 'max:6']]);
+        $request->validate(['images' => ['sometimes', 'array', 'max:6'], 'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'], 'image_color' => ['sometimes', 'array'], 'image_color.*' => ['nullable', 'string', 'max:80'], 'image_variant' => ['sometimes', 'array'], 'image_variant.*' => ['nullable', 'integer']]);
         $request->validate(['image_alt' => ['sometimes', 'array'], 'image_alt.*' => ['nullable', 'string', 'max:180'], 'image_caption' => ['sometimes', 'array'], 'image_caption.*' => ['nullable', 'string', 'max:180']]);
         $variants = app(ImageVariantService::class);
+        foreach ($request->input('image_variant', []) as $imageKey => $variantId) {
+            if ($variantId === null || $variantId === '') {
+                continue;
+            }
+            $variant = $product->variants()->whereKey($variantId)->first();
+            if (! $variant) {
+                throw ValidationException::withMessages(["image_variant.$imageKey" => 'تنوع تصویر باید متعلق به همین محصول باشد.']);
+            }
+            $colorName = $request->input("image_color.$imageKey");
+            if ($colorName && mb_strtolower(trim($colorName)) !== mb_strtolower(trim($variant->color_name))) {
+                throw ValidationException::withMessages(["image_variant.$imageKey" => 'رنگ و تنوع تصویر باید با هم سازگار باشند.']);
+            }
+        }
         foreach ($request->file('images', []) as $index => $file) {
             $validated = validator(['image' => $file], ['image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']])->validate();
             $media = $variants->store($validated['image'], 'products/'.$product->id);
             try {
-                $product->images()->create(['path' => $media['path'], 'width' => $media['width'], 'height' => $media['height'], 'alt_text' => $request->input("image_alt.$index", $product->name), 'caption' => $request->input("image_caption.$index"), 'sort_order' => $product->images()->count(), 'is_cover' => $product->images()->doesntExist()]);
+                $variantId = $request->input("image_variant.$index");
+                $variant = $variantId ? $product->variants()->whereKey($variantId)->firstOrFail() : null;
+                $colorName = $request->input("image_color.$index");
+                if ($variant && $colorName && mb_strtolower($colorName) !== mb_strtolower($variant->color_name)) {
+                    throw ValidationException::withMessages(["image_variant.$index" => 'رنگ و تنوع تصویر باید با هم سازگار باشند.']);
+                }
+                $product->images()->create(['path' => $media['path'], 'width' => $media['width'], 'height' => $media['height'], 'alt_text' => $request->input("image_alt.$index", $product->name), 'caption' => $request->input("image_caption.$index"), 'sort_order' => $product->images()->count(), 'is_cover' => $product->images()->doesntExist(), 'product_variant_id' => $variant?->id, 'color_name' => $colorName ?: $variant?->color_name]);
             } catch (\Throwable $exception) {
                 $variants->delete($media['path']);
                 throw $exception;
@@ -294,13 +351,18 @@ class ProductController extends Controller
         $order = $request->input('image_order', []);
         $alt = $request->input('image_alt', []);
         $captions = $request->input('image_caption', []);
+        $colors = $request->input('image_color', []);
+        $variantIds = $request->input('image_variant', []);
+        $newImageIndexes = array_map('strval', array_keys($request->file('images', [])));
+        $colors = array_diff_key($colors, array_flip($newImageIndexes));
+        $variantIds = array_diff_key($variantIds, array_flip($newImageIndexes));
         if (! is_array($order)) {
             $order = [];
         }
         if (! is_array($alt)) {
             $alt = [];
         }
-        if ($order === [] && $alt === [] && $captions === []) {
+        if ($order === [] && $alt === [] && $captions === [] && $colors === [] && $variantIds === []) {
             return;
         }
 
@@ -319,6 +381,22 @@ class ProductController extends Controller
         abort_unless(count(array_diff(array_keys($captions), $validIds)) === 0, 422);
         foreach ($captions as $id => $value) {
             $product->images()->whereKey($id)->update(['caption' => $value]);
+        }
+        validator(['image_color' => $colors, 'image_variant' => $variantIds], ['image_color' => ['array'], 'image_color.*' => ['nullable', 'string', 'max:80'], 'image_variant' => ['array'], 'image_variant.*' => ['nullable', 'integer']])->validate();
+        if (count(array_diff(array_keys($colors + $variantIds), $validIds)) !== 0) {
+            throw ValidationException::withMessages(['image_variant' => 'تصویر انتخاب‌شده متعلق به این محصول نیست.']);
+        }
+        foreach (array_unique(array_merge(array_keys($colors), array_keys($variantIds))) as $imageId) {
+            $variantId = $variantIds[$imageId] ?? null;
+            $colorName = $colors[$imageId] ?? null;
+            $variant = $variantId ? $product->variants()->whereKey($variantId)->first() : null;
+            if ($variantId && ! $variant) {
+                throw ValidationException::withMessages(["image_variant.$imageId" => 'تنوع تصویر باید متعلق به همین محصول باشد.']);
+            }
+            if ($variant && $colorName && mb_strtolower($colorName) !== mb_strtolower($variant->color_name)) {
+                throw ValidationException::withMessages(["image_variant.$imageId" => 'رنگ و تنوع انتخاب‌شده با هم سازگار نیستند.']);
+            }
+            $product->images()->whereKey($imageId)->update(['color_name' => $colorName ?: $variant?->color_name, 'product_variant_id' => $variant?->id]);
         }
     }
 }

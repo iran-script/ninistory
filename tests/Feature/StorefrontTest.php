@@ -75,6 +75,23 @@ class StorefrontTest extends TestCase
             ->assertSee('/storage/'.$imagePath, false);
     }
 
+    public function test_product_page_exposes_only_real_active_variant_combinations(): void
+    {
+        $product = Product::create(['name' => 'Choice product', 'slug' => 'choice-product', 'is_active' => true]);
+        $available = $product->variants()->create(['sku' => 'CHOICE-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 2, 'is_active' => true]);
+        $product->variants()->create(['sku' => 'CHOICE-2', 'size' => '4Y', 'color_name' => 'Blue', 'price_toman' => 1000, 'stock_quantity' => 2, 'is_active' => false]);
+
+        $this->get(route('products.show', $product))->assertOk()->assertSee('value="'.$available->id.'"', false)->assertDontSee('value="'.($available->id + 1).'"', false);
+    }
+
+    public function test_cart_rejects_a_variant_that_is_not_active(): void
+    {
+        $product = Product::create(['name' => 'Inactive item', 'slug' => 'inactive-item', 'is_active' => true]);
+        $variant = $product->variants()->create(['sku' => 'INACTIVE-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 2, 'is_active' => false]);
+
+        $this->post(route('cart.add'), ['variant_id' => $variant->id, 'quantity' => 1])->assertNotFound();
+    }
+
     public function test_product_media_uses_lazy_loading_dimensions_and_responsive_sources(): void
     {
         Storage::fake('public');
