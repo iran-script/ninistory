@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ShippingMethod;
 use App\Models\ShippingRate;
 use App\Services\ShippingRateService;
+use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -19,6 +20,7 @@ class ShippingMethodController extends Controller
 
     public function store(Request $r): RedirectResponse
     {
+        Money::normalizeRequest($r, ['base_fee_toman']);
         $data = $r->validate(['code' => 'required|alpha_dash|max:40|unique:shipping_methods,code', 'name' => 'required|string|max:120', 'description' => 'nullable|string', 'base_fee_toman' => 'required|integer|min:0', 'estimated_delivery' => 'nullable|string|max:120', 'sort_order' => 'required|integer|min:0', 'is_enabled' => 'nullable|boolean', 'free_shipping_eligible' => 'nullable|boolean']);
         $data['is_enabled'] = $r->boolean('is_enabled');
         $data['free_shipping_eligible'] = $r->boolean('free_shipping_eligible');
@@ -29,6 +31,7 @@ class ShippingMethodController extends Controller
 
     public function update(Request $r, ShippingMethod $shippingMethod): RedirectResponse
     {
+        Money::normalizeRequest($r, ['base_fee_toman']);
         $data = $r->validate(['name' => 'required|string|max:120', 'description' => 'nullable|string', 'base_fee_toman' => 'required|integer|min:0', 'estimated_delivery' => 'nullable|string|max:120', 'sort_order' => 'required|integer|min:0', 'is_enabled' => 'nullable|boolean', 'free_shipping_eligible' => 'nullable|boolean']);
         $data['is_enabled'] = $r->boolean('is_enabled');
         $data['free_shipping_eligible'] = $r->boolean('free_shipping_eligible');
@@ -76,6 +79,7 @@ class ShippingMethodController extends Controller
 
     private function rateData(Request $r): array
     {
+        Money::normalizeRequest($r, ['fee_toman', 'free_over_toman', 'weight_surcharge_toman', 'min_order_toman', 'max_order_toman']);
         $data = $r->validate(['province_code' => 'nullable|string|max:20', 'city_code' => 'nullable|string|max:40', 'fee_toman' => 'required|integer|min:0', 'free_over_toman' => 'nullable|integer|min:0', 'weight_surcharge_toman' => 'nullable|integer|min:0', 'weight_step_grams' => 'nullable|integer|min:1', 'min_weight_grams' => 'nullable|integer|min:0', 'max_weight_grams' => 'nullable|integer|min:0', 'min_order_toman' => 'nullable|integer|min:0', 'max_order_toman' => 'nullable|integer|min:0', 'priority' => 'required|integer|min:0|max:10000', 'effective_from' => 'nullable|date', 'effective_until' => 'nullable|date|after_or_equal:effective_from', 'is_enabled' => 'nullable|boolean']);
         $data['is_enabled'] = $r->boolean('is_enabled');
         if (isset($data['max_weight_grams'],$data['min_weight_grams']) && $data['max_weight_grams'] < $data['min_weight_grams']) {
@@ -84,7 +88,7 @@ class ShippingMethodController extends Controller
             abort(422, 'حداکثر مبلغ باید بزرگ‌تر یا مساوی حداقل مبلغ باشد.');
         }
 
-return $data;
+        return $data;
     }
 
     private function assertNoAmbiguousRule(ShippingMethod $method, array $data, ?int $ignore = null): void

@@ -20,6 +20,7 @@ class Banner extends Model
     protected $fillable = [
         'title', 'subtitle', 'desktop_image_path', 'mobile_image_path', 'alt_text',
         'cta_label', 'cta_url', 'position', 'sort_order', 'is_active', 'starts_at', 'ends_at',
+        'duration_seconds', 'text_position', 'overlay_style',
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class Banner extends Model
             'is_active' => 'boolean',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
+            'duration_seconds' => 'integer',
         ];
     }
 

@@ -6,6 +6,7 @@ use App\Exceptions\InsufficientStockException;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InventoryService
 {
@@ -30,6 +31,44 @@ class InventoryService
             $this->movements->record($locked, $type, $before, $quantity, $locked->reserved_quantity, $locked->reserved_quantity, $reason, $actor);
 
             return $locked->refresh();
+        });
+    }
+
+    /**
+     * @param  array<int, array{quantity:int|string, updated_at?:string|null}>  $changes
+     */
+    public function setPhysicalStockBatch(array $changes, string $reason, ?User $actor = null): int
+    {
+        return DB::transaction(function () use ($changes, $reason, $actor): int {
+            $updated = 0;
+
+            foreach ($changes as $variantId => $change) {
+                $variant = ProductVariant::query()->lockForUpdate()->findOrFail($variantId);
+                $quantity = (int) $change['quantity'];
+
+                if ($quantity === (int) $variant->stock_quantity) {
+                    continue;
+                }
+
+                if (blank($change['updated_at'] ?? null) || $variant->updated_at?->toISOString() !== $change['updated_at']) {
+                    throw ValidationException::withMessages([
+                        "inventory.$variantId.quantity" => 'موجودی این تنوع توسط مدیر دیگری تغییر کرده است؛ صفحه را تازه‌سازی و دوباره بررسی کنید.',
+                    ]);
+                }
+
+                if ($quantity < (int) $variant->reserved_quantity) {
+                    throw ValidationException::withMessages([
+                        "inventory.$variantId.quantity" => 'موجودی فیزیکی نمی‌تواند کمتر از موجودی رزروشده باشد.',
+                    ]);
+                }
+
+                $before = (int) $variant->stock_quantity;
+                $variant->update(['stock_quantity' => $quantity]);
+                $this->movements->record($variant, 'manual_adjustment', $before, $quantity, (int) $variant->reserved_quantity, (int) $variant->reserved_quantity, $reason, $actor);
+                $updated++;
+            }
+
+            return $updated;
         });
     }
 

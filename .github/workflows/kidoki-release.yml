@@ -1,0 +1,239 @@
+name: Kidoki release validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      release_ref:
+        description: 'Exact branch, tag, or commit SHA to build'
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kidoki-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_VERSION: '8.5'
+  NODE_VERSION: '22'
+
+jobs:
+  validate:
+    name: Laravel, PostgreSQL, Redis and container smoke tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kidoki_ci
+          POSTGRES_USER: kidoki_ci
+          POSTGRES_PASSWORD: kidoki_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U kidoki_ci -d kidoki_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_ref || github.sha }}
+
+      - name: Pin the reviewed source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commit=$(git rev-parse HEAD)
+          echo "SOURCE_COMMIT=$source_commit" >> "$GITHUB_ENV"
+          echo "APP_IMAGE=kidoki/app:$source_commit" >> "$GITHUB_ENV"
+          echo "WEB_IMAGE=kidoki/web:$source_commit" >> "$GITHUB_ENV"
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, intl, pdo_pgsql, redis
+          coverage: none
+          tools: composer:v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Install frontend dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Prepare CI environment
+        shell: bash
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+          {
+            echo 'APP_ENV=ci'
+            echo 'APP_DEBUG=false'
+            echo 'DB_CONNECTION=pgsql'
+            echo 'DB_HOST=127.0.0.1'
+            echo 'DB_PORT=5432'
+            echo 'DB_DATABASE=kidoki_ci'
+            echo 'DB_USERNAME=kidoki_ci'
+            echo 'DB_PASSWORD=kidoki_ci_password'
+            echo 'REDIS_CLIENT=phpredis'
+            echo 'REDIS_HOST=127.0.0.1'
+            echo 'REDIS_PORT=6379'
+            echo 'CACHE_STORE=redis'
+            echo 'QUEUE_CONNECTION=redis'
+            echo 'SESSION_DRIVER=array'
+            echo 'PAYMENT_GATEWAY=mock'
+            echo 'PAYMENT_MOCK_ENABLED=false'
+          } >> .env
+
+      - name: Run Laravel test suite
+        run: php artisan test --compact
+
+      - name: Run migrations against PostgreSQL 16
+        run: php artisan migrate --force
+
+      - name: Verify Redis cache and queue wiring
+        shell: bash
+        run: |
+          php artisan tinker --execute="cache()->store('redis')->put('ci-probe', 'ok', 60); if (cache()->store('redis')->get('ci-probe') !== 'ok') { exit(1); }"
+          php artisan queue:work redis --once --no-interaction --timeout=10
+          php artisan schedule:run --no-interaction
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Linux amd64 images for runtime validation
+        run: |
+          docker buildx build --platform linux/amd64 --file Dockerfile --tag "$APP_IMAGE" --load .
+          docker buildx build --platform linux/amd64 --file docker/nginx/Dockerfile --tag "$WEB_IMAGE" --load .
+
+      - name: Create disposable runtime environment
+        shell: bash
+        run: |
+          cat > .env.production <<EOF
+          APP_NAME=Kidoki
+          APP_ENV=production
+          APP_KEY=$(php artisan key:generate --show --no-ansi)
+          APP_DEBUG=false
+          APP_URL=http://127.0.0.1:18082
+          APP_LOCALE=fa
+          APP_FALLBACK_LOCALE=en
+          DB_CONNECTION=pgsql
+          DB_HOST=db
+          DB_PORT=5432
+          DB_DATABASE=kidoki
+          DB_USERNAME=kidoki_ci
+          DB_PASSWORD=kidoki_ci_password
+          REDIS_CLIENT=phpredis
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          CACHE_STORE=redis
+          QUEUE_CONNECTION=redis
+          SESSION_DRIVER=database
+          FILESYSTEM_DISK=public
+          PAYMENT_GATEWAY=mock
+          PAYMENT_MOCK_ENABLED=false
+          KIDOKI_HTTP_PORT=18082
+          KIDOKI_APP_IMAGE=$APP_IMAGE
+          KIDOKI_WEB_IMAGE=$WEB_IMAGE
+          KIDOKI_POSTGRES_IMAGE=postgres:16-alpine
+          KIDOKI_REDIS_IMAGE=redis:7-alpine
+          KIDOKI_PG_VOLUME=kidoki_ci_${GITHUB_RUN_ID}_pg
+          KIDOKI_REDIS_VOLUME=kidoki_ci_${GITHUB_RUN_ID}_redis
+          KIDOKI_STORAGE_VOLUME=kidoki_ci_${GITHUB_RUN_ID}_storage
+          KIDOKI_NETWORK_NAME=kidoki_ci_${GITHUB_RUN_ID}_network
+          EOF
+
+      - name: Start disposable Kidoki runtime
+        run: >-
+          docker compose -p kidoki-ci
+          -f compose.production.yml
+          -f compose.production.small.yml
+          --env-file .env.production
+          up -d db redis app web worker scheduler
+
+      - name: Run runtime migrations and HTTP smoke test
+        shell: bash
+        run: |
+          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production run --rm app php artisan migrate --force
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18082/up >/dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:18082/up >/dev/null
+          curl --fail --silent http://127.0.0.1:18082/build/manifest.json >/dev/null
+
+      - name: Verify persistent storage across restart
+        shell: bash
+        run: |
+          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production exec -T app sh -c 'printf ci > storage/app/public/ci-persistence.txt'
+          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production restart app
+          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production exec -T app test -f storage/app/public/ci-persistence.txt
+
+      - name: Inspect health and logs
+        run: |
+          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production ps
+          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production logs --no-color --tail=150 app web worker scheduler
+
+      - name: Export offline image archives and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 postgres:16-alpine
+          docker pull --platform linux/amd64 redis:7-alpine
+          mkdir -p release-artifacts
+          docker save "$APP_IMAGE" | gzip -n > "release-artifacts/kidoki-app-${SOURCE_COMMIT}.tar.gz"
+          docker save "$WEB_IMAGE" | gzip -n > "release-artifacts/kidoki-web-${SOURCE_COMMIT}.tar.gz"
+          docker save postgres:16-alpine | gzip -n > "release-artifacts/postgres-16-alpine-${SOURCE_COMMIT}.tar.gz"
+          docker save redis:7-alpine | gzip -n > "release-artifacts/redis-7-alpine-${SOURCE_COMMIT}.tar.gz"
+          for archive in release-artifacts/*.tar.gz; do gzip -t "$archive"; done
+          sha256sum release-artifacts/*.tar.gz > release-artifacts/SHA256SUMS
+          {
+            printf 'source_commit=%s\n' "$SOURCE_COMMIT"
+            for image in "$APP_IMAGE" "$WEB_IMAGE" postgres:16-alpine redis:7-alpine; do
+              docker image inspect "$image" --format '{{join .RepoTags ","}} {{.Id}} {{.Os}}/{{.Architecture}}'
+            done
+          } > release-artifacts/IMAGE-MANIFEST
+          printf '%s\n' "$SOURCE_COMMIT" > release-artifacts/SOURCE_COMMIT
+
+      - name: Upload offline release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kidoki-offline-images-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Remove disposable runtime
+        if: always()
+        run: |
+          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production down -v --remove-orphans
+          rm -f .env.production

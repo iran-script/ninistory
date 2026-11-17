@@ -8,7 +8,7 @@
 
     <section class="admin-card admin-table-wrap">
         <table class="admin-table">
-            <thead><tr><th>تصویر</th><th>عنوان</th><th>جایگاه</th><th>ترتیب</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+            <thead><tr><th>تصویر</th><th>عنوان</th><th>جایگاه</th><th>ترتیب</th><th>مدت</th><th>وضعیت</th><th>عملیات</th></tr></thead>
             <tbody>
                 @forelse ($banners as $banner)
                     <tr>
@@ -16,6 +16,7 @@
                         <td>{{ $banner->title }}</td>
                         <td>{{ $positions[$banner->position] ?? $banner->position }}</td>
                         <td>{{ $banner->sort_order }}</td>
+                        <td>{{ $banner->duration_seconds ?? 6 }} ثانیه</td>
                         <td>{{ $banner->is_active ? 'فعال' : 'غیرفعال' }}</td>
                         <td class="admin-actions">
                             <a href="{{ route('admin.banners.edit', $banner) }}">ویرایش</a>
@@ -27,7 +28,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6">هنوز بنری ثبت نشده است.</td></tr>
+                    <tr><td colspan="7">هنوز بنری ثبت نشده است.</td></tr>
                 @endforelse
             </tbody>
         </table>

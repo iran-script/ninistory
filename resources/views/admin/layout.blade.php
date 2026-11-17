@@ -26,6 +26,7 @@
             <a href="{{ route('admin.orders.index') }}" @class(['is-active' => request()->routeIs('admin.orders.*')])><span class="admin-nav__icon" aria-hidden="true">▣</span>سفارش‌ها</a>
             <a href="{{ route('admin.articles.index') }}" @class(['is-active' => request()->routeIs('admin.articles.*')])><span class="admin-nav__icon" aria-hidden="true">▤</span>مجله و مقالات</a>
             <a href="{{ route('admin.banners.index') }}" @class(['is-active' => request()->routeIs('admin.banners.*')])><span class="admin-nav__icon" aria-hidden="true">▧</span>بنرهای فروشگاه</a>
+            <a href="{{ route('admin.homepage-categories.edit') }}" @class(['is-active' => request()->routeIs('admin.homepage-categories.*')])><span class="admin-nav__icon" aria-hidden="true">▦</span>دسته‌های صفحه اصلی</a>
             <p class="admin-nav__group">تنظیمات</p>
             <a href="{{ route('admin.payments.index') }}" @class(['is-active' => request()->routeIs('admin.payments.*')])><span class="admin-nav__icon" aria-hidden="true">◈</span>پرداخت‌ها</a>
             <a href="{{ route('admin.seo.edit') }}" @class(['is-active' => request()->routeIs('admin.seo.*')])><span class="admin-nav__icon" aria-hidden="true">⚙</span>تنظیمات سئو</a>

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\NavigationCategoryService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -23,10 +24,14 @@ class Category extends Model
     {
         static::saved(function (): void {
             Cache::forget(self::STOREFRONT_CACHE_KEY);
+            Cache::forget(NavigationCategoryService::CACHE_KEY);
+            Cache::forget(HomepageCategorySlot::CACHE_KEY);
             Cache::forget('seo:sitemap:categories');
         });
         static::deleted(function (): void {
             Cache::forget(self::STOREFRONT_CACHE_KEY);
+            Cache::forget(NavigationCategoryService::CACHE_KEY);
+            Cache::forget(HomepageCategorySlot::CACHE_KEY);
             Cache::forget('seo:sitemap:categories');
         });
     }
@@ -49,6 +54,11 @@ class Category extends Model
     public function sizeGuides(): HasMany
     {
         return $this->hasMany(SizeGuide::class);
+    }
+
+    public function homepageCategorySlots(): HasMany
+    {
+        return $this->hasMany(HomepageCategorySlot::class);
     }
 
     public function descendants(): Collection

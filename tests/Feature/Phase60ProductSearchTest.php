@@ -49,6 +49,50 @@ class Phase60ProductSearchTest extends TestCase
         $this->getJson(route('search.autocomplete', ['q' => 'Winter']))->assertJsonPath('results.0.id', $product->id);
     }
 
+    public function test_multiword_search_and_persian_size_filter_find_the_same_product(): void
+    {
+        $category = Category::create(['name' => 'پسرانه', 'slug' => 'boys-multiword', 'is_active' => true]);
+        $product = Product::create(['category_id' => $category->id, 'name' => 'ست پسرانه تابستانی', 'slug' => 'boys-set-multiword', 'is_active' => true]);
+        $product->variants()->create(['sku' => 'BOYS-45', 'size' => '45', 'color_name' => 'آبی', 'price_toman' => 900000, 'stock_quantity' => 3, 'is_active' => true]);
+
+        $this->get(route('products.index', ['q' => 'ست پسرانه']))->assertOk()->assertSee('ست پسرانه تابستانی');
+        $this->get(route('products.index', ['size' => ['۴۵']]))->assertOk()->assertSee('ست پسرانه تابستانی');
+    }
+
+    public function test_size_and_color_filters_use_one_real_variant_combination(): void
+    {
+        $category = Category::create(['name' => 'ترکیب‌ها', 'slug' => 'combination-filter', 'is_active' => true]);
+        $product = Product::create(['category_id' => $category->id, 'name' => 'ترکیب واقعی', 'slug' => 'real-combination', 'is_active' => true]);
+        $product->variants()->create(['sku' => 'COMBO-PINK-45', 'size' => '45', 'color_name' => 'صورتی', 'price_toman' => 1000, 'stock_quantity' => 2, 'is_active' => true]);
+        $product->variants()->create(['sku' => 'COMBO-BLUE-50', 'size' => '50', 'color_name' => 'آبی', 'price_toman' => 1000, 'stock_quantity' => 2, 'is_active' => true]);
+
+        $this->get(route('products.index', ['size' => ['45'], 'color' => ['آبی']]))->assertOk()->assertDontSee('ترکیب واقعی');
+        $this->get(route('products.index', ['size' => ['45'], 'color' => ['صورتی'], 'available' => 1]))->assertOk()->assertSee('ترکیب واقعی');
+    }
+
+    public function test_size_filter_normalizes_digits_and_trims_stored_values_while_preserving_selection(): void
+    {
+        $category = Category::create(['name' => 'Size codes', 'slug' => 'size-codes', 'is_active' => true]);
+        $product = Product::create(['category_id' => $category->id, 'name' => 'Trimmed size product', 'slug' => 'trimmed-size-product', 'is_active' => true]);
+        $product->variants()->create(['sku' => 'SIZE-45-TRIM', 'size' => ' ۴۵ ', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 2, 'is_active' => true]);
+
+        $response = $this->get(route('products.index', ['size' => ['45']]));
+
+        $response->assertOk()->assertSee('Trimmed size product')->assertSee('name="size[]" value="۴۵" checked', false);
+        $this->get(route('products.index', ['size' => ['٤٥']]))->assertSee('Trimmed size product');
+    }
+
+    public function test_catalog_filters_preserve_url_state_and_offer_mobile_sheet_controls(): void
+    {
+        $category = Category::create(['name' => 'Filter category', 'slug' => 'filter-category', 'is_active' => true]);
+        $product = Product::create(['category_id' => $category->id, 'name' => 'Filter product', 'slug' => 'filter-product', 'is_active' => true]);
+        $product->variants()->create(['sku' => 'FILTER-45', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000, 'is_active' => true]);
+
+        $response = $this->get(route('products.index', ['size' => ['45'], 'color' => ['Pink']]));
+
+        $response->assertOk()->assertSee('data-filter-open', false)->assertSee('data-filter-close', false)->assertSee('name="size[]" value="45" checked', false)->assertSee('name="color[]" value="Pink" checked', false);
+    }
+
     public function test_hidden_inactive_archived_and_production_demo_products_are_not_returned(): void
     {
         $category = Category::create(['name' => 'Catalog', 'slug' => 'catalog-search', 'is_active' => true]);

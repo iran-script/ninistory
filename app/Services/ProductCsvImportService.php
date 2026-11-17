@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Support\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -40,7 +41,12 @@ class ProductCsvImportService
             if (! Category::where('slug', $row['category_slug'] ?? '')->exists()) {
                 $rowErrors->push("ردیف {$line}: دسته‌بندی پیدا نشد.");
             }
-            if ((int) ($row['price_toman'] ?? 0) < 1 || (int) ($row['stock_quantity'] ?? -1) < 0) {
+            try {
+                $row['price_toman'] = Money::normalize($row['price_toman'] ?? null);
+            } catch (\InvalidArgumentException) {
+                $row['price_toman'] = null;
+            }
+            if (($row['price_toman'] ?? 0) < 1 || (int) ($row['stock_quantity'] ?? -1) < 0) {
                 $rowErrors->push("ردیف {$line}: قیمت یا موجودی معتبر نیست.");
             }
             if ($rowErrors->isNotEmpty()) {

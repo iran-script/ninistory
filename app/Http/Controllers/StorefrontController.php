@@ -8,11 +8,14 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Services\HomepageCategoryService;
 use App\Services\InventoryReservationService;
 use App\Services\ProductSearchService;
 use App\Services\SeoMetadataService;
 use App\Services\SeoSchemaService;
 use App\Services\ShippingAddressService;
+use App\Support\Money;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -26,17 +29,32 @@ class StorefrontController extends Controller
 {
     public function home(): View
     {
-        $categories = collect(Cache::remember(Category::STOREFRONT_CACHE_KEY, now()->addSeconds(config('performance.public_cache_ttl', 300)), fn (): array => Category::query()->select(['id', 'parent_id', 'name', 'slug', 'image_path'])->where('is_active', true)->whereNull('parent_id')->orderBy('sort_order')->get()->map(fn (Category $category): array => $category->getAttributes())->all()))
-            ->map(fn (array $attributes): Category => Category::query()->getModel()->newFromBuilder($attributes));
+        $search = app(ProductSearchService::class);
+        $homepageCategorySlots = app(HomepageCategoryService::class)->cachedSlots();
         $activeBanners = collect(Cache::remember(Banner::STOREFRONT_CACHE_KEY, now()->addSeconds(config('performance.public_cache_ttl', 300)), fn (): array => Banner::active()->get()->map(fn (Banner $banner): array => $banner->getAttributes())->all()))
             ->map(fn (array $attributes): Banner => Banner::query()->getModel()->newFromBuilder($attributes))
             ->groupBy('position');
+        $heroSlides = $activeBanners->get('hero', collect())
+            ->map(fn (Banner $banner): array => $this->bannerMedia($banner, []))
+            ->filter(fn (array $slide): bool => $slide !== [])
+            ->values();
+        if ($heroSlides->isEmpty()) {
+            $heroSlides->push($this->bannerMedia(null, [
+                'title' => 'روزهای شیرین با لباس‌های دوست‌داشتنی',
+                'subtitle' => 'مجموعه‌ی تازه کیدوکی',
+                'desktop_url' => asset('images/ninistory/hero-kidswear.webp'),
+                'mobile_url' => asset('images/ninistory/hero-kidswear.webp'),
+                'cta_label' => 'دیدن مجموعه', 'cta_url' => route('products.index'),
+                'alt_text' => 'مجموعه لباس کودک کیدوکی',
+                'duration_seconds' => 6, 'text_position' => 'right', 'overlay_style' => 'soft',
+            ]));
+        }
 
         return view('store.home', [
             'seo' => app(SeoMetadataService::class)->home(),
             'schemas' => [app(SeoSchemaService::class)->organization(), app(SeoSchemaService::class)->website()],
-            'categories' => $categories,
-            'categoryImages' => $categories->mapWithKeys(fn (Category $category) => [$category->slug => $this->categoryImageUrl($category)])->all(),
+            'homepageCategorySlots' => $homepageCategorySlots,
+            'heroSlides' => $heroSlides,
             'banners' => [
                 'hero' => $this->bannerMedia($activeBanners->get('hero')?->first(), [
                     'title' => 'روزهای شیرین با لباس‌های دوست‌داشتنی',
@@ -62,7 +80,10 @@ class StorefrontController extends Controller
                 ]),
             ],
             'demoMediaUrl' => asset('images/ninistory/demo-dress-pink.webp'),
-            'featured' => Product::with(['variants:id,product_id,price_toman,stock_quantity,reserved_quantity,is_active', 'images:id,product_id,path,width,height,alt_text,sort_order', 'category:id,slug,name'])->where('is_active', true)->where('is_featured', true)->whereHas('variants', fn ($q) => $q->where('is_active', true))->latest()->take(4)->get(),
+            'featured' => $search->visibleQuery()->where('is_featured', true)->latest('products.created_at')->take(4)->get(),
+            'newArrivals' => $search->visibleQuery()->latest('products.created_at')->take(4)->get(),
+            'offers' => $search->visibleQuery()->whereHas('variants', fn ($variants) => $variants->where('is_active', true)->whereNull('archived_at')->whereColumn('compare_at_price_toman', '>', 'price_toman'))->latest('products.created_at')->take(4)->get(),
+            'sizeShortcuts' => ProductVariant::query()->where('is_active', true)->whereNull('archived_at')->whereHas('product', fn (Builder $products): Builder => $products->where('is_active', true))->select('size')->distinct()->orderBy('size')->limit(8)->pluck('size'),
         ]);
     }
 
@@ -82,6 +103,9 @@ class StorefrontController extends Controller
             'cta_label' => $banner->cta_label,
             'cta_url' => $banner->cta_url ?: route('products.index'),
             'alt_text' => $banner->alt_text,
+            'duration_seconds' => max(3, min(15, (int) ($banner->duration_seconds ?: 6))),
+            'text_position' => $banner->text_position ?: 'right',
+            'overlay_style' => $banner->overlay_style ?: 'soft',
         ];
     }
 
@@ -101,33 +125,79 @@ class StorefrontController extends Controller
 
     public function index(Request $request, ProductSearchService $search): View
     {
-        $products = $search->visibleQuery()
-            ->when($request->filled('q'), fn ($q) => $search->applyTextSearch($q, $request->string('q')->toString()))
-            ->when($request->integer('category'), fn ($q, $id) => $q->where('category_id', $id))
-            ->when($request->filled('min_price') || $request->filled('max_price'), function ($q) use ($request) {
-                $q->whereHas('variants', function ($variants) use ($request) {
-                    $variants->where('is_active', true)->whereNull('archived_at')
-                        ->when($request->filled('min_price'), fn ($v) => $v->where('price_toman', '>=', max(0, (int) $request->input('min_price'))))
-                        ->when($request->filled('max_price'), fn ($v) => $v->where('price_toman', '<=', max(0, (int) $request->input('max_price'))));
-                });
-            })
-            ->when($request->filled('size'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereNull('archived_at')->where('size', $request->string('size'))))
-            ->when($request->filled('color'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereNull('archived_at')->where('color_name', $request->string('color'))))
-            ->when($request->filled('material'), fn ($q) => $q->where('material', $request->string('material')))
-            ->when($request->boolean('available'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', true)->whereNull('archived_at')->whereRaw('stock_quantity > reserved_quantity')))
-            ->when($request->input('sort') === 'price_asc', fn ($q) => $q->withMin('variants', 'price_toman')->orderBy('variants_min_price_toman'))
-            ->when($request->input('sort') === 'price_desc', fn ($q) => $q->withMax('variants', 'price_toman')->orderByDesc('variants_max_price_toman'))
-            ->when(! in_array($request->input('sort'), ['price_asc', 'price_desc'], true), fn ($q) => $q->latest())
+        $categoryIds = [];
+        if ($request->filled('category')) {
+            $category = Category::query()->find($request->integer('category'));
+            if ($category) {
+                $categoryIds = $category->descendants()->prepend($category->id)->map(fn (int|string $id): int => (int) $id)->all();
+            }
+        }
+
+        $filters = $request->only(['size', 'color', 'min_price', 'max_price', 'available', 'material']);
+        $filters['category_ids'] = $categoryIds;
+        $productsQuery = $search->visibleQuery();
+        if ($request->filled('q')) {
+            $search->applyTextSearch($productsQuery, $request->string('q')->toString());
+        }
+        $search->applyFilters($productsQuery, $filters);
+        $sort = $request->input('sort', 'relevant');
+        if ($sort === 'price_asc') {
+            $productsQuery->withMin(['variants' => fn ($variants) => $variants->where('is_active', true)->whereNull('archived_at')], 'price_toman')->orderBy('variants_min_price_toman');
+        } elseif ($sort === 'price_desc') {
+            $productsQuery->withMax(['variants' => fn ($variants) => $variants->where('is_active', true)->whereNull('archived_at')], 'price_toman')->orderByDesc('variants_max_price_toman');
+        } elseif (! $request->filled('q')) {
+            $productsQuery->orderByDesc('is_featured')->latest('products.created_at');
+        }
+
+        $products = $productsQuery
             ->paginate(12)->withQueryString();
 
         $categories = Category::where('is_active', true)->orderBy('sort_order')->get();
+        $facetVariants = ProductVariant::query()->where('is_active', true)->whereNull('archived_at')->whereHas('product', function ($products): void {
+            $products->where('is_active', true);
+            if (app()->environment('production')) {
+                $products->where('slug', 'not like', (string) config('demo_catalog.prefix', 'demo-').'%')->where('merchant_verification_status', 'approved')->where('content_review_status', 'approved');
+            }
+        });
+        $facetMaterials = Product::query()->whereNotNull('material')->where('material', '!=', '')->whereHas('variants', fn (Builder $variants): Builder => $variants->where('is_active', true)->whereNull('archived_at'));
+        if (app()->environment('production')) {
+            $facetMaterials->where('slug', 'not like', (string) config('demo_catalog.prefix', 'demo-').'%')->where('merchant_verification_status', 'approved')->where('content_review_status', 'approved');
+        }
         $seoService = app(SeoMetadataService::class);
         $hasFacets = collect(array_keys($request->query()))->reject(fn ($key) => $key === 'page')->isNotEmpty();
+        $selectedSizes = array_values(array_unique(array_merge(array_filter((array) $request->input('size', [])), $search->normalizedFilterValues($request->input('size', [])))));
+        $selectedColors = array_values(array_unique(array_merge(array_filter((array) $request->input('color', [])), $search->normalizedFilterValues($request->input('color', [])))));
+        $activeFilterLinks = [];
+        foreach (['size' => 'سایز', 'color' => 'رنگ'] as $filter => $label) {
+            $selected = array_values(array_filter((array) $request->input($filter, [])));
+            foreach ($selected as $active) {
+                $remaining = array_values(array_diff($selected, [$active]));
+                $query = $request->query();
+                unset($query['page']);
+                if ($remaining) {
+                    $query[$filter] = $remaining;
+                } else {
+                    unset($query[$filter]);
+                }
+                $activeFilterLinks[] = ['label' => $label.' '.$active, 'url' => route('products.index', $query)];
+            }
+        }
+        if ($request->boolean('available')) {
+            $query = $request->query();
+            unset($query['page'], $query['available']);
+            $activeFilterLinks[] = ['label' => 'موجود', 'url' => route('products.index', $query)];
+        }
 
         return view('store.products', [
             'seo' => $seoService->make('خرید لباس کودک و نوزاد | کیدوکی', 'انتخاب لباس کودک، دخترانه، پسرانه و نوزادی در فروشگاه اینترنتی کیدوکی.', route('products.index'), $hasFacets ? 'noindex,follow' : $seoService->defaults()['robots']),
             'products' => $products,
             'categories' => $categories,
+            'facetSizes' => (clone $facetVariants)->selectRaw('TRIM(size) as size')->distinct()->orderBy('size')->pluck('size'),
+            'facetColors' => (clone $facetVariants)->selectRaw('TRIM(color_name) as color_name')->distinct()->orderBy('color_name')->pluck('color_name'),
+            'facetMaterials' => $facetMaterials->where('is_active', true)->distinct()->orderBy('material')->pluck('material'),
+            'selectedSizes' => $selectedSizes,
+            'selectedColors' => $selectedColors,
+            'activeFilterLinks' => $activeFilterLinks,
             'categoryImages' => $categories->mapWithKeys(fn (Category $category) => [$category->slug => $this->categoryImageUrl($category)])->all(),
         ]);
     }
@@ -140,6 +210,7 @@ class StorefrontController extends Controller
         return response()->json([
             'query' => $query,
             'results' => $search->autocomplete($query),
+            'categories' => $search->autocompleteCategories($query),
             'all_results_url' => route('products.index', ['q' => $query]),
         ]);
     }
@@ -185,17 +256,42 @@ class StorefrontController extends Controller
         return view('store.cart', ['items' => $items]);
     }
 
-    public function addToCart(Request $request): RedirectResponse
+    public function addToCart(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate(['variant_id' => ['required', 'integer', 'exists:product_variants,id'], 'quantity' => ['sometimes', 'integer', 'min:1', 'max:10']]);
-        $variant = ProductVariant::where('is_active', true)->whereHas('product', fn ($q) => $q->where('is_active', true))->findOrFail($data['variant_id']);
+        $variant = ProductVariant::with(['product.images'])->where('is_active', true)->whereHas('product', fn ($q) => $q->where('is_active', true))->findOrFail($data['variant_id']);
         $cart = session('cart', []);
         $newQuantity = ($cart[$variant->id] ?? 0) + ($data['quantity'] ?? 1);
         if ($newQuantity > $variant->available_quantity) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'تعداد انتخاب‌شده بیشتر از موجودی است.'], 422);
+            }
+
             return back()->withErrors(['variant_id' => 'تعداد انتخاب‌شده بیشتر از موجودی است.']);
         }
         $cart[$variant->id] = $newQuantity;
         session(['cart' => $cart]);
+
+        if ($request->expectsJson()) {
+            $cover = $variant->product->images->firstWhere('is_cover', true) ?? $variant->product->images->first();
+            $cartVariants = ProductVariant::query()->whereIn('id', array_keys($cart))->get()->keyBy('id');
+
+            return response()->json([
+                'message' => 'کالا با موفقیت به سبد خرید اضافه شد.',
+                'cart_count' => count($cart),
+                'cart_items_count' => array_sum($cart),
+                'cart_total_toman' => collect($cart)->sum(fn (int $quantity, int|string $id): int => (int) ($cartVariants[$id]?->price_toman ?? 0) * $quantity),
+                'item' => [
+                    'name' => $variant->product->name,
+                    'color' => $variant->color_name,
+                    'size' => $variant->size,
+                    'quantity' => $newQuantity,
+                    'price_toman' => $variant->price_toman,
+                    'price_label' => Money::toman($variant->price_toman),
+                    'thumbnail' => $cover ? Storage::disk('public')->url($cover->path) : null,
+                ],
+            ]);
+        }
 
         return redirect()->route('cart')->with('status', 'به سبد اضافه شد.');
     }

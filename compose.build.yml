@@ -1,0 +1,13 @@
+name: kidoki
+
+# Local/CI build overlay. Production uses compose.production.yml without this file.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile

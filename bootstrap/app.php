@@ -18,6 +18,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureUserIsAdmin::class,
             'private.cache' => AddPrivateCacheHeaders::class,
         ]);
+
+        $trustedProxies = env('TRUSTED_PROXIES');
+        if (filled($trustedProxies)) {
+            $middleware->trustProxies(
+                at: $trustedProxies === '*'
+                    ? '*'
+                    : array_values(array_filter(array_map('trim', explode(',', $trustedProxies)))),
+            );
+        }
+
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('admin*') ? route('admin.login') : null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

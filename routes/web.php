@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\CategoryController as AdminCategoryController;
 use App\Http\Controllers\Admin\ContentPageController as AdminContentPageController;
 use App\Http\Controllers\Admin\ContentReadinessController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\HomepageCategoryController;
 use App\Http\Controllers\Admin\InventoryController as AdminInventoryController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
@@ -121,7 +122,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('logout', [AdminAuthController::class, 'destroy'])->name('logout');
         Route::get('/', AdminDashboardController::class)->name('dashboard');
         Route::resource('categories', AdminCategoryController::class)->except(['show']);
+        Route::get('categories/{category}/impact', [AdminCategoryController::class, 'impact'])->name('categories.impact');
+        Route::post('categories/reorder', [AdminCategoryController::class, 'reorder'])->name('categories.reorder');
         Route::resource('banners', AdminBannerController::class)->except(['show']);
+        Route::get('homepage-categories', [HomepageCategoryController::class, 'edit'])->name('homepage-categories.edit');
+        Route::put('homepage-categories', [HomepageCategoryController::class, 'update'])->name('homepage-categories.update');
         Route::resource('products', AdminProductController::class)->except(['show']);
         Route::post('products/{product}/duplicate', [AdminProductController::class, 'duplicate'])->name('products.duplicate');
         Route::get('products/{product}/preview', [AdminProductController::class, 'preview'])->name('products.preview');
@@ -177,6 +182,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('products/{product}/images/{image}', [AdminProductController::class, 'destroyImage'])->name('products.images.destroy');
         Route::post('products/{product}/images/{image}/cover', [AdminProductController::class, 'setCover'])->name('products.images.cover');
         Route::delete('products/{product}/variants/{variant}', [AdminProductController::class, 'destroyVariant'])->name('products.variants.destroy');
+        Route::post('products/{product}/inventory', [AdminProductController::class, 'stockBatch'])->name('products.inventory.update');
         Route::patch('variants/{variant}/stock', [AdminProductController::class, 'stock'])->name('variants.stock');
     });
 });

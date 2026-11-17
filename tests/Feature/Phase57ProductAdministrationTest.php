@@ -21,6 +21,83 @@ class Phase57ProductAdministrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_product_editor_targets_variant_table_and_preserves_size_chart_controls(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Editor set', 'slug' => 'editor-set', 'size_chart' => ['size' => '45'], 'is_active' => false]);
+        $product->variants()->create(['sku' => 'EDITOR-1', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000, 'is_active' => true]);
+
+        $response = $this->actingAs($admin)->get(route('admin.products.edit', $product));
+        preg_match('/<table id="variant-editor-table".*?<\/table>/s', $response->getContent(), $tableMatches);
+        $variantTable = $tableMatches[0] ?? '';
+
+        $this->assertSame(8, substr_count($variantTable, '<th>'));
+        $this->assertSame(8, substr_count($variantTable, '<td'));
+
+        $response
+            ->assertOk()
+            ->assertSee('id="variant-editor-table"', false)
+            ->assertSee("document.querySelector('#variant-editor-table tbody')", false)
+            ->assertSee('value="__KEY__"', false)
+            ->assertSee('id="add-measurement-row"', false)
+            ->assertSee('type="button"', false);
+    }
+
+    public function test_color_hex_is_validated_and_saved_without_changing_variant_identity(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Color set', 'slug' => 'color-set', 'is_active' => false]);
+        $variant = $product->variants()->create(['sku' => 'COLOR-1', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000, 'is_active' => true]);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), [
+            'name' => $product->name, 'slug' => $product->slug, 'variants_complete' => 1,
+            'variants' => [$variant->id => ['sku' => $variant->sku, 'size' => $variant->size, 'color_name' => $variant->color_name, 'color_hex' => '#F4A6C1', 'price_toman' => 1000, 'is_active' => 1]],
+        ])->assertRedirect();
+
+        $this->assertSame('#F4A6C1', $variant->fresh()->color_hex);
+        $this->actingAs($admin)->put(route('admin.products.update', $product), [
+            'name' => $product->name, 'slug' => $product->slug, 'variants_complete' => 1,
+            'variants' => [$variant->id => ['sku' => $variant->sku, 'size' => $variant->size, 'color_name' => $variant->color_name, 'color_hex' => 'red', 'price_toman' => 1000, 'is_active' => 1]],
+        ])->assertSessionHasErrors('variants.'.$variant->id.'.color_hex');
+    }
+
+    public function test_batch_inventory_updates_are_atomic_audited_and_stale_safe(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Stock set', 'slug' => 'stock-set', 'is_active' => false]);
+        $first = $product->variants()->create(['sku' => 'STOCK-1', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 2, 'is_active' => true]);
+        $second = $product->variants()->create(['sku' => 'STOCK-2', 'size' => '50', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 3, 'is_active' => true]);
+        $versions = [$first->id => $first->fresh()->updated_at->toISOString(), $second->id => $second->fresh()->updated_at->toISOString()];
+
+        $this->actingAs($admin)->post(route('admin.products.inventory.update', $product), ['reason' => 'شمارش انبار', 'inventory' => [
+            $first->id => ['quantity' => 5, 'updated_at' => $versions[$first->id]], $second->id => ['quantity' => 7, 'updated_at' => $versions[$second->id]],
+        ]])->assertRedirect();
+        $this->assertSame(5, $first->fresh()->stock_quantity);
+        $this->assertSame(7, $second->fresh()->stock_quantity);
+        $this->assertSame(1, $first->inventoryMovements()->where('movement_type', 'manual_adjustment')->count());
+        $this->assertSame(1, $second->inventoryMovements()->where('movement_type', 'manual_adjustment')->count());
+
+        $stale = $first->fresh()->updated_at->toISOString();
+        $first->forceFill(['stock_quantity' => 6, 'updated_at' => $first->fresh()->updated_at->addSecond()])->saveQuietly();
+        $this->assertNotSame($stale, $first->fresh()->updated_at->toISOString());
+        $this->actingAs($admin)->post(route('admin.products.inventory.update', $product), ['reason' => 'قدیمی', 'inventory' => [
+            $first->id => ['quantity' => 9, 'updated_at' => $stale], $second->id => ['quantity' => 8, 'updated_at' => $second->fresh()->updated_at->toISOString()],
+        ]])->assertSessionHasErrors('inventory.'.$first->id.'.quantity');
+        $this->assertSame(6, $first->fresh()->stock_quantity);
+        $this->assertSame(7, $second->fresh()->stock_quantity);
+    }
+
+    public function test_batch_inventory_rejects_reserved_stock_and_non_admins(): void
+    {
+        $customer = User::factory()->create(['is_admin' => false]);
+        $product = Product::create(['name' => 'Reserved set', 'slug' => 'reserved-set', 'is_active' => false]);
+        $variant = $product->variants()->create(['sku' => 'RESERVED-1', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 1000, 'stock_quantity' => 4, 'reserved_quantity' => 2, 'is_active' => true]);
+
+        $this->actingAs($customer)->post(route('admin.products.inventory.update', $product), [])->assertForbidden();
+        $this->actingAs(User::factory()->create(['is_admin' => true]))->post(route('admin.products.inventory.update', $product), ['reason' => 'کم کردن', 'inventory' => [$variant->id => ['quantity' => 1, 'updated_at' => $variant->updated_at->toISOString()]]])->assertSessionHasErrors('inventory.'.$variant->id.'.quantity');
+        $this->assertSame(4, $variant->fresh()->stock_quantity);
+    }
+
     public function test_variant_sku_is_generated_and_remains_stable_when_labels_change(): void
     {
         $product = Product::create(['name' => 'ست پاپیون دخترانه', 'slug' => 'bow-set', 'is_active' => false]);

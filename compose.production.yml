@@ -1,0 +1,146 @@
+name: kidoki
+
+services:
+  app:
+    image: ${KIDOKI_APP_IMAGE:-kidoki/app:local}
+    env_file: [.env.production]
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      APP_DEBUG: "false"
+    volumes:
+      - kidoki_storage:/var/www/html/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t >/dev/null 2>&1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    init: true
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "1.00", memory: 512M}
+        reservations: {cpus: "0.25", memory: 128M}
+    networks: [kidoki_internal]
+
+  web:
+    image: ${KIDOKI_WEB_IMAGE:-kidoki/web:local}
+    ports:
+      - "127.0.0.1:${KIDOKI_HTTP_PORT:-18082}:8080"
+    volumes:
+      - kidoki_storage:/var/www/html/storage:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/up >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 128M}
+        reservations: {cpus: "0.10", memory: 32M}
+    networks: [kidoki_internal]
+
+  db:
+    image: ${KIDOKI_POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?Set DB_DATABASE in .env.production}
+      POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in .env.production}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.production}
+    volumes:
+      - kidoki_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "1.00", memory: 768M}
+        reservations: {cpus: "0.25", memory: 256M}
+    networks: [kidoki_internal]
+
+  redis:
+    image: ${KIDOKI_REDIS_IMAGE:-redis:7-alpine}
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - kidoki_redisdata:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 256M}
+        reservations: {cpus: "0.10", memory: 64M}
+    networks: [kidoki_internal]
+
+  worker:
+    image: ${KIDOKI_APP_IMAGE:-kidoki/app:local}
+    env_file: [.env.production]
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+      APP_DEBUG: "false"
+    command: [php, artisan, queue:work, redis, --sleep=3, --tries=3, --timeout=90, --max-time=3600, --no-interaction]
+    volumes:
+      - kidoki_storage:/var/www/html/storage
+    depends_on:
+      app: {condition: service_healthy}
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    init: true
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.75", memory: 384M}
+        reservations: {cpus: "0.10", memory: 96M}
+    networks: [kidoki_internal]
+
+  scheduler:
+    image: ${KIDOKI_APP_IMAGE:-kidoki/app:local}
+    env_file: [.env.production]
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+      APP_DEBUG: "false"
+    command: [sh, -c, "while true; do php artisan schedule:run --no-interaction; sleep 60; done"]
+    volumes:
+      - kidoki_storage:/var/www/html/storage
+    depends_on:
+      app: {condition: service_healthy}
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    init: true
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.25", memory: 192M}
+        reservations: {cpus: "0.05", memory: 64M}
+    networks: [kidoki_internal]
+
+volumes:
+  kidoki_pgdata:
+    name: ${KIDOKI_PG_VOLUME:-kidoki_pgdata}
+  kidoki_redisdata:
+    name: ${KIDOKI_REDIS_VOLUME:-kidoki_redisdata}
+  kidoki_storage:
+    name: ${KIDOKI_STORAGE_VOLUME:-kidoki_storage}
+
+networks:
+  kidoki_internal:
+    name: ${KIDOKI_NETWORK_NAME:-kidoki_internal}
+    driver: bridge
+    internal: true

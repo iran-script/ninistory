@@ -5,23 +5,31 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\SeoRedirect;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 
 class CategoryController extends Controller
 {
-    public function index()
+    public function index(): View
     {
-        return view('admin.categories.index', ['categories' => Category::with('parent')->withCount('products')->orderBy('sort_order')->paginate(20)]);
+        $categories = Category::query()->withCount(['products', 'children'])->orderBy('sort_order')->orderBy('name')->get();
+        $tree = $this->tree($categories);
+
+        return view('admin.categories.index', compact('categories', 'tree'));
     }
 
-    public function create()
+    public function create(): View
     {
         return view('admin.categories.form', ['category' => new Category, 'parents' => Category::orderBy('name')->get()]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
         $data['slug'] = $data['slug'] ?: (Str::slug($data['name']) ?: 'category-'.Str::lower(Str::random(10)));
@@ -32,12 +40,14 @@ class CategoryController extends Controller
         return redirect()->route('admin.categories.index')->with('status', 'دسته‌بندی ساخته شد.');
     }
 
-    public function edit(Category $category)
+    public function edit(Category $category): View
     {
-        return view('admin.categories.form', ['category' => $category, 'parents' => Category::whereKeyNot($category->id)->orderBy('name')->get()]);
+        $excluded = $category->descendants()->push($category->id);
+
+        return view('admin.categories.form', ['category' => $category, 'parents' => Category::whereNotIn('id', $excluded)->orderBy('name')->get()]);
     }
 
-    public function update(Request $request, Category $category)
+    public function update(Request $request, Category $category): RedirectResponse
     {
         $oldSlug = $category->slug;
         $data = $this->validated($request, $category);
@@ -59,14 +69,76 @@ class CategoryController extends Controller
         return redirect()->route('admin.categories.index')->with('status', 'دسته‌بندی به‌روزرسانی شد.');
     }
 
-    public function destroy(Category $category)
+    public function impact(Category $category): JsonResponse
     {
-        if ($category->products()->exists() || $category->children()->exists()) {
+        $descendantIds = $category->descendants();
+        $descendantProducts = $descendantIds->isEmpty() ? 0 : Category::query()->whereIn('id', $descendantIds)->withCount('products')->get()->sum('products_count');
+
+        return response()->json([
+            'category_id' => $category->id,
+            'direct_products' => $category->products()->count(),
+            'descendant_categories' => $descendantIds->count(),
+            'descendant_products' => $descendantProducts,
+            'homepage_slots' => $category->homepageCategorySlots()->count(),
+            'can_delete' => ! $category->products()->exists() && $descendantIds->isEmpty() && ! $category->homepageCategorySlots()->exists(),
+        ]);
+    }
+
+    public function reorder(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['categories' => ['required', 'array', 'min:1'], 'categories.*.id' => ['required', 'integer', 'distinct', 'exists:categories,id'], 'categories.*.parent_id' => ['nullable', 'integer', 'exists:categories,id'], 'categories.*.sort_order' => ['required', 'integer', 'min:0', 'max:65535']]);
+        foreach ($data['categories'] as $row) {
+            $parentId = filled($row['parent_id'] ?? null) ? (int) $row['parent_id'] : null;
+            if ($parentId !== null && ((int) $row['id'] === $parentId || Category::findOrFail((int) $row['id'])->descendants()->contains($parentId))) {
+                return back()->withErrors(['categories' => 'ساختار دسته‌بندی نمی‌تواند چرخه ایجاد کند.'])->withInput();
+            }
+        }
+
+        DB::transaction(function () use ($data): void {
+            $categories = Category::query()->whereIn('id', collect($data['categories'])->pluck('id'))->lockForUpdate()->get()->keyBy('id');
+            foreach ($data['categories'] as $row) {
+                $categories[(int) $row['id']]->update(['parent_id' => filled($row['parent_id'] ?? null) ? (int) $row['parent_id'] : null, 'sort_order' => (int) $row['sort_order']]);
+            }
+        });
+
+        return back()->with('status', 'ترتیب دسته‌بندی‌ها ذخیره شد.');
+    }
+
+    public function destroy(Category $category): RedirectResponse
+    {
+        $descendantIds = $category->descendants();
+        if ($category->products()->exists() || $descendantIds->isNotEmpty() || $category->homepageCategorySlots()->exists()) {
             return back()->withErrors(['category' => 'دسته‌بندی دارای محصول یا زیرشاخه است و حذف نمی‌شود.']);
         }
         $category->delete();
 
         return back()->with('status', 'دسته‌بندی حذف شد.');
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function tree(Collection $categories, ?int $parentId = null): array
+    {
+        return $categories->where('parent_id', $parentId)->map(function (Category $category) use ($categories): array {
+            $children = $this->tree($categories, $category->id);
+
+            return [
+                'id' => (int) $category->id,
+                'name' => $category->name,
+                'slug' => $category->slug,
+                'description' => $category->description,
+                'parent_id' => $category->parent_id,
+                'is_active' => (bool) $category->is_active,
+                'sort_order' => (int) $category->sort_order,
+                'direct_products' => (int) $category->products_count,
+                'children_count' => count($children),
+                'total_products' => (int) $category->products_count + collect($children)->sum('total_products'),
+                'image_url' => $category->image_path ? Storage::disk('public')->url($category->image_path) : null,
+                'edit_url' => route('admin.categories.edit', $category),
+                'update_url' => route('admin.categories.update', $category),
+                'delete_url' => route('admin.categories.destroy', $category),
+                'children' => $children,
+            ];
+        })->values()->all();
     }
 
     private function validated(Request $request, ?Category $category = null): array

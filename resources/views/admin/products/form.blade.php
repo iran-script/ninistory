@@ -153,8 +153,8 @@
             <h2 class="mb-3 text-xl font-bold">تنوع، قیمت و موجودی</h2>
             <h2 class="mb-3 text-xl font-bold">گونه‌ها</h2>
             <div class="admin-table-wrap">
-                <table class="admin-variants">
-                    <thead><tr><th>رنگ</th><th>اندازه</th><th>SKU</th><th>قیمت تومان</th><th>قیمت قبل</th><th>HEX</th><th>فعال</th></tr></thead>
+                <table id="variant-editor-table" class="admin-variants">
+                    <thead><tr><th>انتخاب</th><th>رنگ</th><th>اندازه</th><th>SKU</th><th>قیمت تومان</th><th>قیمت قبل</th><th>رنگ‌نما (HEX)</th><th>فعال</th></tr></thead>
                     <tbody>
                         @foreach (old('variants', $product->exists ? $product->variants->keyBy('id')->toArray() : [0 => []]) as $id => $variant)
                             <tr>
@@ -162,9 +162,9 @@
                                 <td><input name="variants[{{ $id }}][color_name]" required value="{{ data_get($variant, 'color_name') }}"></td>
                                 <td><input name="variants[{{ $id }}][size]" required value="{{ data_get($variant, 'size') }}"></td>
                                 <td><input name="variants[{{ $id }}][sku]" dir="ltr" value="{{ data_get($variant, 'sku') }}" placeholder="تولید خودکار"></td>
-                                <td><input name="variants[{{ $id }}][price_toman]" required type="number" min="1" value="{{ data_get($variant, 'price_toman') }}"></td>
-                                <td><input name="variants[{{ $id }}][compare_at_price_toman]" type="number" min="1" value="{{ data_get($variant, 'compare_at_price_toman') }}"></td>
-                                <td><input name="variants[{{ $id }}][color_hex]" dir="ltr" value="{{ data_get($variant, 'color_hex') }}"></td>
+                                <td><input name="variants[{{ $id }}][price_toman]" required type="text" inputmode="numeric" data-money-input dir="ltr" value="{{ filled(data_get($variant, 'price_toman')) ? \App\Support\Money::format(data_get($variant, 'price_toman')) : '' }}"></td>
+                                <td><input name="variants[{{ $id }}][compare_at_price_toman]" type="text" inputmode="numeric" data-money-input dir="ltr" value="{{ filled(data_get($variant, 'compare_at_price_toman')) ? \App\Support\Money::format(data_get($variant, 'compare_at_price_toman')) : '' }}"></td>
+                                <td><div class="flex items-center gap-2"><input type="color" class="variant-color-picker h-10 w-12 cursor-pointer rounded-lg border p-1" value="{{ data_get($variant, 'color_hex') ?: '#000000' }}" aria-label="انتخاب رنگ"><span class="variant-color-swatch h-6 w-6 rounded-full border border-slate-300" style="background-color: {{ data_get($variant, 'color_hex') ?: '#000000' }}"></span><input class="variant-color-hex w-28" name="variants[{{ $id }}][color_hex]" dir="ltr" value="{{ data_get($variant, 'color_hex') }}" placeholder="#RRGGBB" pattern="^#[0-9A-Fa-f]{6}$" inputmode="text" aria-label="کد HEX رنگ"></div></td>
                                 <td><input name="variants[{{ $id }}][is_active]" value="1" type="checkbox" @checked(data_get($variant, 'is_active', true))>@if (is_numeric($id) && data_get($variant, 'updated_at'))<input type="hidden" name="variants[{{ $id }}][updated_at]" value="{{ \Illuminate\Support\Carbon::parse(data_get($variant, 'updated_at'))->toISOString() }}">@endif</td>
                             </tr>
                         @endforeach
@@ -172,17 +172,18 @@
                 </table>
             </div>
             <button type="button" class="mt-3 rounded-lg border px-3 py-2"
-                    onclick="const t=document.querySelector('#variant-template').innerHTML.replaceAll('__KEY__',crypto.randomUUID());document.querySelector('.admin-variants tbody').insertAdjacentHTML('beforeend',t)">
+                    onclick="const t=document.querySelector('#variant-template').innerHTML.replaceAll('__KEY__',crypto.randomUUID());document.querySelector('#variant-editor-table tbody').insertAdjacentHTML('beforeend',t);window.initVariantColorPickers?.();window.initMoneyInputs?.(document.querySelector('#variant-editor-table tbody tr:last-child'))">
                 افزودن گونه
             </button>
             <template id="variant-template">
                 <tr>
+                    <td><input class="bulk-variant" type="checkbox" value="__KEY__" aria-label="انتخاب برای تغییر قیمت"></td>
                     <td><input name="variants[__KEY__][color_name]" required></td>
                     <td><input name="variants[__KEY__][size]" required></td>
                     <td><input name="variants[__KEY__][sku]" dir="ltr" placeholder="تولید خودکار"></td>
-                    <td><input name="variants[__KEY__][price_toman]" required type="number" min="1"></td>
-                    <td><input name="variants[__KEY__][compare_at_price_toman]" type="number" min="1"></td>
-                    <td><input name="variants[__KEY__][color_hex]" dir="ltr"></td>
+                    <td><input name="variants[__KEY__][price_toman]" required type="text" inputmode="numeric" data-money-input dir="ltr"></td>
+                    <td><input name="variants[__KEY__][compare_at_price_toman]" type="text" inputmode="numeric" data-money-input dir="ltr"></td>
+                    <td><div class="flex items-center gap-2"><input type="color" class="variant-color-picker h-10 w-12 cursor-pointer rounded-lg border p-1" value="#000000" aria-label="انتخاب رنگ"><span class="variant-color-swatch h-6 w-6 rounded-full border border-slate-300" style="background-color: #000000"></span><input class="variant-color-hex w-28" name="variants[__KEY__][color_hex]" dir="ltr" placeholder="#RRGGBB" pattern="^#[0-9A-Fa-f]{6}$" inputmode="text" aria-label="کد HEX رنگ"></div></td>
                     <td><input name="variants[__KEY__][is_active]" value="1" type="checkbox" checked></td>
                 </tr>
             </template>
@@ -205,24 +206,26 @@
     @endif
 
     @if ($product->exists)
-        <section class="admin-card mt-5">
+        <form id="bulk-inventory-form" class="admin-card mt-5" method="post" action="{{ route('admin.products.inventory.update', $product) }}">
+            @csrf
             <h2 class="mb-3 text-xl font-bold">تغییر موجودی</h2>
             @foreach ($product->variants as $variant)
-                <form class="mb-3 flex flex-wrap items-end gap-2" method="post"
-                      action="{{ route('admin.variants.stock', $variant) }}">
-                    @csrf
-                    @method('patch')
-                    <span class="min-w-36">{{ $variant->color_name }} / {{ $variant->size }} — فعلی: {{ $variant->stock_quantity }}</span>
+                <div class="inventory-row mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-transparent p-2 transition" data-inventory-row>
+                    <span class="min-w-36">{{ $variant->color_name }} / {{ $variant->size }} — فعلی: <strong>{{ $variant->stock_quantity }}</strong></span>
                     <label>موجودی جدید
-                        <input required type="number" min="0" name="quantity" value="{{ $variant->stock_quantity }}">
+                        <input required type="number" min="0" max="1000000" name="inventory[{{ $variant->id }}][quantity]" value="{{ old('inventory.'.$variant->id.'.quantity', $variant->stock_quantity) }}" data-original="{{ $variant->stock_quantity }}" data-inventory-quantity>
                     </label>
-                    <label>دلیل
-                        <input required name="reason" minlength="3" maxlength="180">
-                    </label>
-                    <button class="admin-button">ثبت تغییر</button>
-                </form>
+                    <input type="hidden" name="inventory[{{ $variant->id }}][updated_at]" value="{{ $variant->updated_at?->toISOString() }}">
+                    <span class="text-xs text-slate-500" data-delta></span>
+                </div>
             @endforeach
-        </section>
+            <div class="mt-4 flex flex-wrap items-end gap-3 border-t pt-4">
+                <label>دلیل تغییرات
+                    <input required name="reason" minlength="3" maxlength="180" value="{{ old('reason') }}">
+                </label>
+                <button class="admin-button" type="submit" data-inventory-submit>ثبت تغییرات موجودی</button>
+            </div>
+        </form>
     @endif
 
     @if ($product->exists)
@@ -241,6 +244,8 @@
 </script><script>document.querySelectorAll('.gallery-item').forEach(item=>{item.querySelector('.gallery-up')?.addEventListener('click',()=>{const previous=item.previousElementSibling;if(previous?.classList.contains('gallery-item')){item.parentNode.insertBefore(item,previous);syncGallery()}});item.querySelector('.gallery-down')?.addEventListener('click',()=>{const next=item.nextElementSibling;if(next?.classList.contains('gallery-item')){item.parentNode.insertBefore(next,item);syncGallery()}});item.addEventListener('dragstart',event=>event.dataTransfer.setData('text/plain',item.dataset.imageId));item.addEventListener('dragover',event=>event.preventDefault());item.addEventListener('drop',event=>{event.preventDefault();const dragged=[...document.querySelectorAll('.gallery-item')].find(candidate=>candidate.dataset.imageId===event.dataTransfer.getData('text/plain'));if(dragged&&dragged!==item)item.parentNode.insertBefore(dragged,item);syncGallery()})});const syncGallery=()=>document.querySelectorAll('.gallery-item').forEach((item,index)=>{const input=item.querySelector('input[name^="image_order"]');if(input)input.value=index});</script>@endpush
 @if($product->exists)@push('scripts')<script>document.querySelector('#bulk-pricing')?.addEventListener('submit',event=>{const form=event.currentTarget;form.querySelectorAll('input[name="variant_ids[]"]').forEach(input=>{if(input.value==='')input.remove()});document.querySelectorAll('.bulk-variant:checked').forEach(box=>{const input=document.createElement('input');input.type='hidden';input.name='variant_ids[]';input.value=box.value;form.appendChild(input)});if(!form.querySelector('input[name="variant_ids[]"]')){event.preventDefault();alert('حداقل یک تنوع را انتخاب کنید.')}});</script>@endpush @endif
 @push('scripts')<script>
+window.initVariantColorPickers=()=>document.querySelectorAll('.variant-color-picker').forEach(picker=>{if(picker.dataset.bound)return;picker.dataset.bound='1';const wrapper=picker.closest('div');const hex=wrapper.querySelector('.variant-color-hex');const swatch=wrapper.querySelector('.variant-color-swatch');const valid=value=>/^#[0-9a-fA-F]{6}$/.test(value);const sync=(value,source)=>{if(!valid(value))return;if(source!=='hex')hex.value=value.toUpperCase();picker.value=value;swatch.style.backgroundColor=value};picker.addEventListener('input',()=>sync(picker.value,'picker'));hex.addEventListener('input',()=>{const value=hex.value.trim();if(valid(value))sync(value,'hex')});hex.addEventListener('blur',()=>hex.setCustomValidity(hex.value&&!valid(hex.value)?'کد رنگ باید با قالب #RRGGBB باشد.':''))});window.initVariantColorPickers();
+const inventoryForm=document.querySelector('#bulk-inventory-form');inventoryForm?.querySelectorAll('[data-inventory-quantity]').forEach(input=>input.addEventListener('input',()=>{const row=input.closest('[data-inventory-row]');const delta=Number(input.value)-Number(input.dataset.original);row.classList.toggle('border-amber-300',delta!==0);row.classList.toggle('bg-amber-50',delta!==0);row.querySelector('[data-delta]').textContent=delta===0?'':'تغییر پیشنهادی: '+(delta>0?'+':'')+delta}));inventoryForm?.addEventListener('submit',event=>{const button=event.currentTarget.querySelector('[data-inventory-submit]');if(button.disabled){event.preventDefault();return}button.disabled=true;button.textContent='در حال ثبت...'});
 (()=>{
     const form=document.querySelector('.admin-form');
     if(!form)return;

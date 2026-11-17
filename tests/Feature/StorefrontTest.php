@@ -48,6 +48,17 @@ class StorefrontTest extends TestCase
         $this->assertDatabaseHas('stock_reservations', ['quantity' => 2, 'status' => 'active']);
     }
 
+    public function test_json_cart_add_stays_on_the_current_page_and_returns_drawer_summary(): void
+    {
+        $product = Product::create(['name' => 'Drawer item', 'slug' => 'drawer-item', 'is_active' => true]);
+        $variant = $product->variants()->create(['sku' => 'DRAWER-1', 'size' => '45', 'color_name' => 'Pink', 'price_toman' => 125000, 'stock_quantity' => 4, 'is_active' => true]);
+
+        $response = $this->postJson(route('cart.add'), ['variant_id' => $variant->id, 'quantity' => 2]);
+
+        $response->assertOk()->assertJsonPath('item.name', 'Drawer item')->assertJsonPath('item.quantity', 2)->assertJsonPath('item.price_toman', 125000)->assertJsonPath('cart_items_count', 2);
+        $this->assertSame([$variant->id => 2], session('cart'));
+    }
+
     public function test_missing_local_demo_assets_do_not_emit_broken_preview_urls(): void
     {
         $this->seed();
@@ -133,5 +144,29 @@ class StorefrontTest extends TestCase
             ->assertOk()
             ->assertSee('/storage/banners/managed.jpg', false)
             ->assertSee('Managed hero');
+    }
+
+    public function test_homepage_renders_ordered_active_hero_campaign_slides(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('banners/first.jpg', 'image');
+        Storage::disk('public')->put('banners/second.jpg', 'image');
+        Banner::create([
+            'title' => 'First campaign', 'subtitle' => 'First', 'desktop_image_path' => 'banners/first.jpg',
+            'alt_text' => 'First campaign image', 'position' => 'hero', 'sort_order' => 2, 'is_active' => true,
+        ]);
+        Banner::create([
+            'title' => 'Second campaign', 'subtitle' => 'Second', 'desktop_image_path' => 'banners/second.jpg',
+            'alt_text' => 'Second campaign image', 'position' => 'hero', 'sort_order' => 1, 'is_active' => true,
+        ]);
+        Banner::create([
+            'title' => 'Hidden campaign', 'subtitle' => 'Hidden', 'desktop_image_path' => 'banners/second.jpg',
+            'alt_text' => 'Hidden campaign image', 'position' => 'hero', 'sort_order' => 0, 'is_active' => false,
+        ]);
+
+        $response = $this->get(route('home'));
+
+        $response->assertOk()->assertSee('First campaign')->assertSee('Second campaign')->assertDontSee('Hidden campaign')->assertSee('data-campaign-slider', false)->assertSee('data-campaign-dot="1"', false);
+        $this->assertSame(2, substr_count($response->getContent(), 'class="campaign-slide campaign-slide--'));
     }
 }

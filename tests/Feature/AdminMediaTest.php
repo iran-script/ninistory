@@ -21,13 +21,16 @@ class AdminMediaTest extends TestCase
 
         $response = $this->actingAs($admin)->post(route('admin.banners.store'), [
             'title' => 'Hero', 'subtitle' => 'New season', 'alt_text' => 'Hero image',
-            'position' => 'hero', 'sort_order' => 1, 'cta_label' => 'Shop', 'cta_url' => '/products',
+            'position' => 'hero', 'sort_order' => 1, 'duration_seconds' => 8, 'text_position' => 'center', 'overlay_style' => 'strong', 'cta_label' => 'Shop', 'cta_url' => '/products',
             'is_active' => 1, 'desktop_image' => UploadedFile::fake()->image('hero.jpg', 1200, 600),
             'mobile_image' => UploadedFile::fake()->image('hero-mobile.jpg', 900, 900),
         ]);
 
         $response->assertRedirect(route('admin.banners.index'));
         $banner = Banner::firstOrFail();
+        $this->assertSame(8, $banner->duration_seconds);
+        $this->assertSame('center', $banner->text_position);
+        $this->assertSame('strong', $banner->overlay_style);
         Storage::disk('public')->assertExists($banner->desktop_image_path);
         Storage::disk('public')->assertExists($banner->mobile_image_path);
         $this->get(route('admin.banners.index'))->assertOk()->assertSee('Hero');
@@ -36,6 +39,12 @@ class AdminMediaTest extends TestCase
             'title' => 'Unsafe', 'alt_text' => 'Unsafe', 'position' => 'hero', 'sort_order' => 2,
             'cta_url' => 'https://example.com', 'desktop_image' => UploadedFile::fake()->image('x.jpg', 1200, 600),
         ])->assertSessionHasErrors('cta_url');
+
+        $this->actingAs($admin)->post(route('admin.banners.store'), [
+            'title' => 'Invalid duration', 'alt_text' => 'Invalid duration', 'position' => 'hero', 'sort_order' => 3,
+            'duration_seconds' => 20, 'text_position' => 'right', 'overlay_style' => 'soft',
+            'desktop_image' => UploadedFile::fake()->image('invalid.jpg', 1200, 600),
+        ])->assertSessionHasErrors('duration_seconds');
     }
 
     public function test_admin_can_upload_replace_and_remove_category_cover_image(): void

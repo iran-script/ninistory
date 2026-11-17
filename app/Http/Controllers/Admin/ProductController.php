@@ -14,6 +14,7 @@ use App\Services\ProductReadinessService;
 use App\Services\ProductVariantSkuService;
 use App\Services\SeoMetadataService;
 use App\Services\SeoSchemaService;
+use App\Support\Money;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -129,6 +130,7 @@ class ProductController extends Controller
 
     public function previewPricing(Request $request, Product $product)
     {
+        Money::normalizeRequest($request, ['price_toman']);
         $data = $request->validate(['variant_ids' => ['required', 'array', 'min:1'], 'variant_ids.*' => ['integer', 'exists:product_variants,id'], 'price_toman' => ['required', 'integer', 'min:1', 'max:1000000000']]);
         $variants = $product->variants()->whereIn('id', $data['variant_ids'])->get();
         abort_unless($variants->count() === count($data['variant_ids']), 422);
@@ -138,6 +140,7 @@ class ProductController extends Controller
 
     public function applyPricing(Request $request, Product $product)
     {
+        Money::normalizeRequest($request, ['price_toman']);
         $data = $request->validate(['variant_ids' => ['required', 'array', 'min:1'], 'variant_ids.*' => ['integer', 'exists:product_variants,id'], 'price_toman' => ['required', 'integer', 'min:1', 'max:1000000000']]);
         $updated = $product->variants()->whereIn('id', $data['variant_ids'])->update(['price_toman' => $data['price_toman']]);
 
@@ -237,6 +240,28 @@ class ProductController extends Controller
         return back()->with('status', 'موجودی و سابقه‌ی تغییر ثبت شد.');
     }
 
+    public function stockBatch(Request $request, Product $product)
+    {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:180'],
+            'inventory' => ['required', 'array'],
+            'inventory.*.quantity' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'inventory.*.updated_at' => ['nullable', 'date'],
+        ]);
+
+        $changes = [];
+        foreach ($data['inventory'] as $variantId => $change) {
+            $variant = $product->variants()->whereKey($variantId)->firstOrFail();
+            if ((int) $change['quantity'] !== (int) $variant->stock_quantity) {
+                $changes[(int) $variantId] = $change;
+            }
+        }
+
+        $updated = app(InventoryService::class)->setPhysicalStockBatch($changes, $data['reason'], $request->user());
+
+        return back()->with('status', "موجودی {$updated} تنوع با موفقیت ثبت شد.");
+    }
+
     private function validateProduct(Request $request, ?Product $product = null): array
     {
         $data = $request->validate(['category_id' => ['nullable', 'integer', 'exists:categories,id'], 'name' => ['required', 'string', 'max:180'], 'slug' => ['nullable', 'string', 'max:190', 'alpha_dash:ascii', 'unique:products,slug,'.($product?->id ?? 'NULL')], 'sku' => ['nullable', 'string', 'max:100', 'unique:products,sku,'.($product?->id ?? 'NULL')], 'short_description' => ['nullable', 'string', 'max:500'], 'description' => ['nullable', 'string', 'max:10000'], 'brand' => ['nullable', 'string', 'max:160'], 'material' => ['nullable', 'string', 'max:160'], 'composition' => ['nullable', 'string', 'max:240'], 'fit_information' => ['nullable', 'string', 'max:5000'], 'season' => ['nullable', 'string', 'max:100'], 'selling_points' => ['nullable', 'string', 'max:5000'], 'care_instructions' => ['nullable', 'string', 'max:5000'], 'age_guidance' => ['nullable', 'string', 'max:160'], 'size_chart' => ['nullable', 'string', 'max:10000'], 'measured_dimensions' => ['nullable', 'string', 'max:10000'], 'content_review_status' => ['sometimes', 'in:draft,needs_review,approved'], 'meta_title' => ['nullable', 'string', 'max:255'], 'meta_description' => ['nullable', 'string', 'max:320'], 'canonical_url' => ['nullable', 'url:http,https', 'max:500'], 'robots_directive' => ['nullable', 'in:index,follow,noindex,follow,noindex,nofollow'], 'seo_content' => ['nullable', 'string', 'max:10000'], 'is_active' => ['sometimes', 'boolean'], 'is_featured' => ['sometimes', 'boolean']]);
@@ -260,6 +285,21 @@ class ProductController extends Controller
     private function saveVariants(Request $request, Product $product): void
     {
         $submittedVariants = $request->input('variants', []);
+        if (is_array($submittedVariants)) {
+            foreach ($submittedVariants as $id => $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                foreach (['price_toman', 'compare_at_price_toman'] as $field) {
+                    try {
+                        $submittedVariants[$id][$field] = Money::normalize($row[$field] ?? null);
+                    } catch (\InvalidArgumentException) {
+                        throw ValidationException::withMessages(["variants.{$id}.{$field}" => 'مبلغ باید فقط شامل رقم‌های معتبر باشد.']);
+                    }
+                }
+            }
+            $request->merge(['variants' => $submittedVariants]);
+        }
         if (! is_array($submittedVariants)) {
             throw ValidationException::withMessages(['variants' => 'جدول تنوع‌ها معتبر نیست.']);
         }

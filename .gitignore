@@ -1,8 +1,11 @@
 *.log
+__pycache__/
+*.py[cod]
 .DS_Store
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.sqlite
 *.sqlite3
 *.db

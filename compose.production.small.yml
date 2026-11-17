@@ -1,0 +1,64 @@
+name: kidoki
+
+# Conservative overlay for the measured 2 vCPU / 3.8 GiB VPS.
+# Use after a read-only capacity check and keep the base compose file unchanged.
+services:
+  app:
+    deploy:
+      resources:
+        limits:
+          cpus: "${KIDOKI_APP_CPUS:-0.75}"
+          memory: "${KIDOKI_APP_MEMORY:-384M}"
+        reservations:
+          cpus: "${KIDOKI_APP_CPU_RESERVATION:-0.10}"
+          memory: "${KIDOKI_APP_MEMORY_RESERVATION:-96M}"
+
+  web:
+    deploy:
+      resources:
+        limits:
+          cpus: "${KIDOKI_WEB_CPUS:-0.20}"
+          memory: "${KIDOKI_WEB_MEMORY:-64M}"
+        reservations:
+          cpus: "${KIDOKI_WEB_CPU_RESERVATION:-0.05}"
+          memory: "${KIDOKI_WEB_MEMORY_RESERVATION:-24M}"
+
+  db:
+    deploy:
+      resources:
+        limits:
+          cpus: "${KIDOKI_DB_CPUS:-0.50}"
+          memory: "${KIDOKI_DB_MEMORY:-512M}"
+        reservations:
+          cpus: "${KIDOKI_DB_CPU_RESERVATION:-0.10}"
+          memory: "${KIDOKI_DB_MEMORY_RESERVATION:-128M}"
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: "${KIDOKI_REDIS_CPUS:-0.20}"
+          memory: "${KIDOKI_REDIS_MEMORY:-128M}"
+        reservations:
+          cpus: "${KIDOKI_REDIS_CPU_RESERVATION:-0.05}"
+          memory: "${KIDOKI_REDIS_MEMORY_RESERVATION:-32M}"
+
+  worker:
+    deploy:
+      resources:
+        limits:
+          cpus: "${KIDOKI_WORKER_CPUS:-0.25}"
+          memory: "${KIDOKI_WORKER_MEMORY:-192M}"
+        reservations:
+          cpus: "${KIDOKI_WORKER_CPU_RESERVATION:-0.05}"
+          memory: "${KIDOKI_WORKER_MEMORY_RESERVATION:-48M}"
+
+  scheduler:
+    deploy:
+      resources:
+        limits:
+          cpus: "${KIDOKI_SCHEDULER_CPUS:-0.10}"
+          memory: "${KIDOKI_SCHEDULER_MEMORY:-128M}"
+        reservations:
+          cpus: "${KIDOKI_SCHEDULER_CPU_RESERVATION:-0.02}"
+          memory: "${KIDOKI_SCHEDULER_MEMORY_RESERVATION:-32M}"

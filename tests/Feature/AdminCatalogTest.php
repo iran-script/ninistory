@@ -134,7 +134,9 @@ class AdminCatalogTest extends TestCase
             ->assertOk()
             ->assertSee('name="name"', false)
             ->assertSee('EDITABLE-1')
-            ->assertSee('name="quantity"', false);
+            ->assertSee('id="bulk-inventory-form"', false)
+            ->assertSee('name="inventory[1][quantity]"', false)
+            ->assertSee('ثبت تغییرات موجودی');
     }
 
     public function test_admin_can_save_a_published_form_as_a_draft(): void
