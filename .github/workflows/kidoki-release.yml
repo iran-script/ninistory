@@ -140,7 +140,11 @@ jobs:
           set -euo pipefail
           loaded_extensions=$(docker run --rm --entrypoint php "$APP_IMAGE" -d opcache.enable_cli=1 -m)
           for extension in bcmath intl mbstring opcache pdo_pgsql zip redis; do
-            if ! grep -Fxiq "$extension" <<< "$loaded_extensions"; then
+            expected_extension="$extension"
+            if [ "$extension" = opcache ]; then
+              expected_extension='Zend OPcache'
+            fi
+            if ! grep -Fxiq "$expected_extension" <<< "$loaded_extensions"; then
               echo "Required PHP extension is not loaded: $extension" >&2
               exit 1
             fi
