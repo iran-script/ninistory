@@ -198,13 +198,16 @@ jobs:
       - name: Run runtime migrations and HTTP smoke test
         shell: bash
         run: |
-          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production run --rm app php artisan migrate --force
+          set -euo pipefail
+          compose_args=(-p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production)
+          trap 'status=$?; docker compose "${compose_args[@]}" ps; docker compose "${compose_args[@]}" logs --no-color --tail=150 app web worker scheduler; exit "$status"' ERR
+          docker compose "${compose_args[@]}" run --rm app php artisan migrate --force
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:18082/up >/dev/null; then break; fi
+            if curl --fail --silent --show-error http://127.0.0.1:18082/up >/dev/null; then break; fi
             sleep 2
           done
-          curl --fail --silent http://127.0.0.1:18082/up >/dev/null
-          curl --fail --silent http://127.0.0.1:18082/build/manifest.json >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:18082/up >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:18082/build/manifest.json >/dev/null
 
       - name: Verify persistent storage across restart
         shell: bash
