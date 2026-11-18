@@ -119,6 +119,20 @@ jobs:
       - name: Run migrations against PostgreSQL 16
         run: php artisan migrate --force
 
+      - name: Run PostgreSQL storefront search regression tests
+        env:
+          APP_ENV: ci
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: kidoki_ci
+          DB_USERNAME: kidoki_ci
+          DB_PASSWORD: kidoki_ci_password
+          REDIS_CLIENT: phpredis
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: php artisan test --compact tests/Feature/Phase60ProductSearchTest.php
+
       - name: Verify Redis cache and queue wiring
         shell: bash
         run: |

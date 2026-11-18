@@ -78,7 +78,7 @@ class ProductSearchService
             });
         }
         $rank = $variants[0];
-        $query->orderByRaw('CASE WHEN LOWER(name) = ? OR LOWER(sku) = ? THEN 0 WHEN LOWER(name) LIKE ? THEN 1 WHEN LOWER(sku) LIKE ? THEN 2 WHEN EXISTS (SELECT 1 FROM product_variants AS search_variants WHERE search_variants.product_id = products.id AND search_variants.is_active = 1 AND search_variants.archived_at IS NULL AND (search_variants.sku LIKE ? OR search_variants.color_name LIKE ? OR search_variants.size LIKE ?)) THEN 3 ELSE 4 END', [$rank, $rank, $rank.'%', $rank.'%', '%'.$rank.'%', '%'.$rank.'%', '%'.$rank.'%'])->orderByDesc('is_featured')->latest('products.created_at');
+        $query->orderByRaw('CASE WHEN LOWER(name) = ? OR LOWER(sku) = ? THEN 0 WHEN LOWER(name) LIKE ? THEN 1 WHEN LOWER(sku) LIKE ? THEN 2 WHEN EXISTS (SELECT 1 FROM product_variants AS search_variants WHERE search_variants.product_id = products.id AND search_variants.is_active = ? AND search_variants.archived_at IS NULL AND (search_variants.sku LIKE ? OR search_variants.color_name LIKE ? OR search_variants.size LIKE ?)) THEN 3 ELSE 4 END', [$rank, $rank, $rank.'%', $rank.'%', true, '%'.$rank.'%', '%'.$rank.'%', '%'.$rank.'%'])->orderByDesc('is_featured')->latest('products.created_at');
 
         return $query;
     }

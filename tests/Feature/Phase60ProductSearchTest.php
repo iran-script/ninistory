@@ -40,6 +40,20 @@ class Phase60ProductSearchTest extends TestCase
         $this->assertContains($categoryMatch->id, collect($this->getJson(route('search.autocomplete', ['q' => 'Dress collection']))->json('results'))->pluck('id')->all());
     }
 
+    public function test_search_autocomplete_returns_visible_results_for_boolean_columns(): void
+    {
+        $category = Category::create(['name' => 'Shirts', 'slug' => 'shirts-search', 'is_active' => true]);
+        $visible = $this->product('Summer shirt', 'summer-shirt', $category, 'SHIRT-1', 2);
+        $hidden = $this->product('Hidden shirt', 'hidden-shirt', $category, 'SHIRT-2', 2, false);
+        $visible->variants()->create(['sku' => 'SHIRT-3', 'size' => '4Y', 'color_name' => 'Blue', 'price_toman' => 125000, 'stock_quantity' => 2, 'is_active' => false]);
+
+        $response = $this->getJson(route('search.autocomplete', ['q' => 'shirt']));
+
+        $response->assertOk()->assertJsonStructure(['query', 'results', 'all_results_url']);
+        $this->assertContains($visible->id, collect($response->json('results'))->pluck('id')->all());
+        $this->assertNotContains($hidden->id, collect($response->json('results'))->pluck('id')->all());
+    }
+
     public function test_sku_and_category_search_share_the_same_endpoint(): void
     {
         $category = Category::create(['name' => 'Winter jackets', 'slug' => 'winter-search', 'is_active' => true]);
