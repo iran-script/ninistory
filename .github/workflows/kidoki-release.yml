@@ -243,7 +243,7 @@ jobs:
           {
             printf 'source_commit=%s\n' "$SOURCE_COMMIT"
             for image in "$APP_IMAGE" "$WEB_IMAGE" postgres:16-alpine redis:7-alpine; do
-              docker image inspect "$image" --format '{{join .RepoTags ","}} {{.Id}} {{.Os}}/{{.Architecture}}'
+              docker image inspect "$image" --format '{{json .RepoTags}} {{.Id}} {{.Os}}/{{.Architecture}}'
             done
           } > release-artifacts/IMAGE-MANIFEST
           printf '%s\n' "$SOURCE_COMMIT" > release-artifacts/SOURCE_COMMIT
