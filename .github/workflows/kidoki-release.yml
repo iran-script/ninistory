@@ -187,6 +187,12 @@ jobs:
           KIDOKI_NETWORK_NAME=kidoki_ci_${GITHUB_RUN_ID}_network
           EOF
 
+      - name: Validate disposable runtime port configuration
+        shell: bash
+        run: |
+          compose_args=(-p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production)
+          docker compose "${compose_args[@]}" config --format json | jq -c '{web_ports: (.services.web.ports // []), web_image: .services.web.image}'
+
       - name: Start disposable Kidoki runtime
         run: >-
           docker compose -p kidoki-ci
