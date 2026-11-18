@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Services\DemoCatalogPurchaseGuard;
 use App\Services\HomepageCategoryService;
 use App\Services\InventoryReservationService;
 use App\Services\ProductSearchService;
@@ -153,16 +154,11 @@ class StorefrontController extends Controller
             ->paginate(12)->withQueryString();
 
         $categories = Category::where('is_active', true)->orderBy('sort_order')->get();
-        $facetVariants = ProductVariant::query()->where('is_active', true)->whereNull('archived_at')->whereHas('product', function ($products): void {
-            $products->where('is_active', true);
-            if (app()->environment('production')) {
-                $products->where('slug', 'not like', (string) config('demo_catalog.prefix', 'demo-').'%')->where('merchant_verification_status', 'approved')->where('content_review_status', 'approved');
-            }
+        $facetVariants = ProductVariant::query()->where('is_active', true)->whereNull('archived_at')->whereHas('product', function ($products) use ($search): void {
+            $search->applyProductionVisibility($products->where('is_active', true));
         });
         $facetMaterials = Product::query()->whereNotNull('material')->where('material', '!=', '')->whereHas('variants', fn (Builder $variants): Builder => $variants->where('is_active', true)->whereNull('archived_at'));
-        if (app()->environment('production')) {
-            $facetMaterials->where('slug', 'not like', (string) config('demo_catalog.prefix', 'demo-').'%')->where('merchant_verification_status', 'approved')->where('content_review_status', 'approved');
-        }
+        $search->applyProductionVisibility($facetMaterials);
         $seoService = app(SeoMetadataService::class);
         $hasFacets = collect(array_keys($request->query()))->reject(fn ($key) => $key === 'page')->isNotEmpty();
         $selectedSizes = array_values(array_unique(array_merge(array_filter((array) $request->input('size', [])), $search->normalizedFilterValues($request->input('size', [])))));
@@ -235,6 +231,7 @@ class StorefrontController extends Controller
 
     public function show(Product $product): View
     {
+        abort_unless(! app(DemoCatalogPurchaseGuard::class)->isPreviewProduct($product) || config('demo_catalog.public_preview'), 404);
         abort_unless($product->is_active && $product->variants()->where('is_active', true)->exists(), 404);
         $product = $product->load(['variants', 'images', 'category']);
 
@@ -260,6 +257,7 @@ class StorefrontController extends Controller
     {
         $data = $request->validate(['variant_id' => ['required', 'integer', 'exists:product_variants,id'], 'quantity' => ['sometimes', 'integer', 'min:1', 'max:10']]);
         $variant = ProductVariant::with(['product.images'])->where('is_active', true)->whereHas('product', fn ($q) => $q->where('is_active', true))->findOrFail($data['variant_id']);
+        app(DemoCatalogPurchaseGuard::class)->ensurePurchasable($variant->product);
         $cart = session('cart', []);
         $newQuantity = ($cart[$variant->id] ?? 0) + ($data['quantity'] ?? 1);
         if ($newQuantity > $variant->available_quantity) {
@@ -300,6 +298,7 @@ class StorefrontController extends Controller
     {
         $data = $request->validate(['quantity' => ['required', 'integer', 'min:1', 'max:10']]);
         abort_unless($variant->is_active && $variant->product->is_active, 404);
+        app(DemoCatalogPurchaseGuard::class)->ensurePurchasable($variant->product);
         if ($data['quantity'] > $variant->available_quantity) {
             return back()->withErrors(['quantity' => 'تعداد انتخاب‌شده بیشتر از موجودی است.']);
         }

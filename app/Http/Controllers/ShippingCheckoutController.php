@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\PickupLocation;
 use App\Models\ProductVariant;
 use App\Models\ShippingMethod;
+use App\Services\DemoCatalogPurchaseGuard;
 use App\Services\InventoryReservationService;
 use App\Services\ShippingAddressService;
 use App\Services\ShippingRateService;
@@ -21,6 +22,7 @@ class ShippingCheckoutController extends Controller
 {
     public function store(Request $request): RedirectResponse
     {
+        app(DemoCatalogPurchaseGuard::class)->ensureCartIsPurchasable(session('cart', []));
         $data = $request->validate(['recipient_name' => 'nullable|string|max:160', 'phone' => 'required|string|max:20', 'address' => 'nullable|string|max:1000', 'building' => 'nullable|string|max:120', 'postal_code' => 'nullable|string|max:20', 'province_code' => 'nullable|string|max:20', 'city_code' => 'nullable|string|max:40', 'address_id' => 'nullable|integer', 'shipping_method' => 'nullable|string|max:40', 'pickup_location_id' => 'nullable|integer', 'checkout_key' => 'nullable|string|max:100', 'save_address' => 'nullable|boolean']);
         if (! $request->filled('shipping_method')) {
             $data['shipping_method'] = 'post_sefareshi';

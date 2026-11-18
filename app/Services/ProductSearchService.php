@@ -45,11 +45,30 @@ class ProductSearchService
             'variants' => fn (HasMany $variants): HasMany => $variants->select(['id', 'product_id', 'sku', 'size', 'color_name', 'color_hex', 'price_toman', 'compare_at_price_toman', 'stock_quantity', 'reserved_quantity', 'is_active', 'archived_at'])->where('is_active', true)->whereNull('archived_at'),
         ])->where('is_active', true)->whereHas('variants', fn (Builder $variants): Builder => $variants->where('is_active', true)->whereNull('archived_at'));
 
-        if (app()->environment('production')) {
-            $query->where('slug', 'not like', (string) config('demo_catalog.prefix', 'demo-').'%')->where('merchant_verification_status', 'approved')->where('content_review_status', 'approved');
-        }
+        $this->applyProductionVisibility($query);
 
         return $query;
+    }
+
+    public function applyProductionVisibility(Builder $products): Builder
+    {
+        if (! app()->environment('production')) {
+            return $products;
+        }
+
+        $prefix = (string) config('demo_catalog.prefix', 'demo-');
+
+        return $products->where(function (Builder $eligible) use ($prefix): void {
+            $eligible->where(function (Builder $realProducts) use ($prefix): void {
+                $realProducts->where('slug', 'not like', $prefix.'%')
+                    ->where('merchant_verification_status', 'approved')
+                    ->where('content_review_status', 'approved');
+            });
+
+            if (config('demo_catalog.public_preview')) {
+                $eligible->orWhere('slug', 'like', $prefix.'kidoki-%');
+            }
+        });
     }
 
     public function applyTextSearch(Builder $query, string $search): Builder
