@@ -48,7 +48,7 @@ services:
       resources:
         limits: {cpus: "0.50", memory: 128M}
         reservations: {cpus: "0.10", memory: 32M}
-    networks: [kidoki_internal]
+    networks: [kidoki_internal, kidoki_edge]
 
   db:
     image: ${KIDOKI_POSTGRES_IMAGE:-postgres:16-alpine}
@@ -144,3 +144,6 @@ networks:
     name: ${KIDOKI_NETWORK_NAME:-kidoki_internal}
     driver: bridge
     internal: true
+  kidoki_edge:
+    name: ${KIDOKI_EDGE_NETWORK_NAME:-kidoki_edge}
+    driver: bridge
