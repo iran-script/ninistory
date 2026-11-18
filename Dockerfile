@@ -17,6 +17,7 @@ WORKDIR /var/www/html
 RUN apk add --no-cache icu-libs libpq libzip \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev libzip-dev oniguruma-dev postgresql-dev \
     && docker-php-ext-install -j1 bcmath intl mbstring pdo_pgsql zip \
+    && docker-php-ext-enable opcache \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apk del .build-deps
