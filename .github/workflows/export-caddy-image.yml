@@ -1,0 +1,44 @@
+name: Export pinned Caddy image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: export-caddy-image
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Export official Caddy image archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Pull official pinned image
+        shell: bash
+        run: docker pull --platform linux/amd64 caddy:2.10.2-alpine
+
+      - name: Verify image identity and export archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='caddy:2.10.2-alpine'
+          metadata=$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}} {{join .RepoDigests " "}}')
+          [[ "$metadata" == linux/amd64* ]]
+          mkdir -p release-artifacts
+          docker save "$image" | gzip -n > release-artifacts/caddy-2.10.2-alpine-linux-amd64.tar.gz
+          gzip -t release-artifacts/caddy-2.10.2-alpine-linux-amd64.tar.gz
+          sha256sum release-artifacts/caddy-2.10.2-alpine-linux-amd64.tar.gz > release-artifacts/SHA256SUMS
+          printf '%s\n' "$metadata" > release-artifacts/IMAGE-MANIFEST
+
+      - name: Upload offline Caddy image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: caddy-2.10.2-alpine-linux-amd64
+          path: release-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
