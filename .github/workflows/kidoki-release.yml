@@ -200,7 +200,7 @@ jobs:
         run: |
           set -euo pipefail
           compose_args=(-p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production)
-          trap 'status=$?; docker compose "${compose_args[@]}" ps; docker compose "${compose_args[@]}" logs --no-color --tail=150 app web worker scheduler; exit "$status"' ERR
+          trap 'status=$?; docker compose "${compose_args[@]}" ps; docker compose "${compose_args[@]}" port web 8080 || true; docker inspect $(docker compose "${compose_args[@]}" ps -q web) --format "{{json .NetworkSettings.Ports}}" || true; docker compose "${compose_args[@]}" logs --no-color --tail=150 app web worker scheduler; exit "$status"' ERR
           docker compose "${compose_args[@]}" run --rm app php artisan migrate --force
           for attempt in {1..30}; do
             if curl --fail --silent --show-error http://127.0.0.1:18082/up >/dev/null; then break; fi
