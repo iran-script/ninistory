@@ -131,8 +131,20 @@ jobs:
 
       - name: Build Linux amd64 images for runtime validation
         run: |
-          docker buildx build --platform linux/amd64 --file Dockerfile --tag "$APP_IMAGE" --load .
-          docker buildx build --platform linux/amd64 --file docker/nginx/Dockerfile --tag "$WEB_IMAGE" --load .
+          docker buildx build --progress=plain --platform linux/amd64 --file Dockerfile --tag "$APP_IMAGE" --load .
+          docker buildx build --progress=plain --platform linux/amd64 --file docker/nginx/Dockerfile --tag "$WEB_IMAGE" --load .
+
+      - name: Verify required PHP extensions in app image
+        shell: bash
+        run: |
+          set -euo pipefail
+          loaded_extensions=$(docker run --rm --entrypoint php "$APP_IMAGE" -m)
+          for extension in bcmath intl mbstring opcache pdo_pgsql zip redis; do
+            if ! grep -Fxiq "$extension" <<< "$loaded_extensions"; then
+              echo "Required PHP extension is not loaded: $extension" >&2
+              exit 1
+            fi
+          done
 
       - name: Create disposable runtime environment
         shell: bash
@@ -235,5 +247,7 @@ jobs:
       - name: Remove disposable runtime
         if: always()
         run: |
-          docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production down -v --remove-orphans
-          rm -f .env.production
+          if [ -f .env.production ]; then
+            docker compose -p kidoki-ci -f compose.production.yml -f compose.production.small.yml --env-file .env.production down -v --remove-orphans
+            rm -f .env.production
+          fi
