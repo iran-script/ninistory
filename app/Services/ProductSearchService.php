@@ -64,16 +64,16 @@ class ProductSearchService
             $query->where(function (Builder $products) use ($tokenVariants): void {
                 foreach ($tokenVariants as $tokenVariant) {
                     $like = '%'.$tokenVariant.'%';
-                    $products->orWhere('name', 'like', $like)
-                        ->orWhere('sku', 'like', $like)
-                        ->orWhere('short_description', 'like', $like)
-                        ->orWhere('description', 'like', $like)
-                        ->orWhere('brand', 'like', $like)
-                        ->orWhere('material', 'like', $like)
+                    $products->orWhereRaw('LOWER(name) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(sku) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(short_description) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(description) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(brand) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(material) LIKE ?', [$like])
                         ->orWhereHas('variants', fn (Builder $variant): Builder => $variant->where('is_active', true)->whereNull('archived_at')->where(function (Builder $match) use ($like): void {
-                            $match->where('sku', 'like', $like)->orWhere('color_name', 'like', $like)->orWhere('size', 'like', $like);
+                            $match->whereRaw('LOWER(sku) LIKE ?', [$like])->orWhereRaw('LOWER(color_name) LIKE ?', [$like])->orWhereRaw('LOWER(size) LIKE ?', [$like]);
                         }))
-                        ->orWhereHas('category', fn (Builder $category): Builder => $category->where('name', 'like', $like));
+                        ->orWhereHas('category', fn (Builder $category): Builder => $category->whereRaw('LOWER(name) LIKE ?', [$like]));
                 }
             });
         }
