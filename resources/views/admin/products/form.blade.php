@@ -53,7 +53,7 @@
         <label>راهنمای سن
             <input name="age_guidance" value="{{ old('age_guidance', $product->age_guidance) }}">
         </label>
-        <div class="admin-span"><h2 id="product-seo" class="admin-form-heading">توضیحات و نمایش در جستجو</h2></div>
+        <div class="admin-span ai-seo-tools"><h2 id="product-seo" class="admin-form-heading">توضیحات و نمایش در جستجو</h2><button class="admin-button admin-button--soft" type="button" data-ai-seo-generate>تولید سئو با هوش مصنوعی</button><p class="ai-seo-status" data-ai-seo-status role="status" aria-live="polite"></p><section class="ai-seo-preview" data-ai-seo-preview hidden aria-label="پیش‌نمایش پیشنهادهای سئو"><h3>پیش‌نمایش قابل ویرایش؛ برای هر فیلد، اعمال را جداگانه انتخاب کنید</h3><div data-ai-seo-fields></div><div class="ai-seo-actions"><button type="button" class="admin-button" data-ai-seo-apply>اعمال پیشنهادهای انتخاب‌شده</button><button type="button" class="admin-button admin-button--muted" data-ai-seo-cancel>انصراف</button></div></section></div>
         <label>عنوان SEO
             <input name="meta_title" value="{{ old('meta_title', $product->meta_title) }}">
         </label>
@@ -154,18 +154,19 @@
             <h2 class="mb-3 text-xl font-bold">گونه‌ها</h2>
             <div class="admin-table-wrap">
                 <table id="variant-editor-table" class="admin-variants">
-                    <thead><tr><th>انتخاب</th><th>رنگ</th><th>اندازه</th><th>SKU</th><th>قیمت تومان</th><th>قیمت قبل</th><th>رنگ‌نما (HEX)</th><th>فعال</th></tr></thead>
+                    <thead><tr><th>انتخاب</th><th>رنگ</th><th>اندازه</th><th>SKU</th><th>قیمت تومان</th><th>قیمت قبل</th><th>رنگ‌نما (HEX)</th><th>فعال</th><th>حذف</th></tr></thead>
                     <tbody>
                         @foreach (old('variants', $product->exists ? $product->variants->keyBy('id')->toArray() : [0 => []]) as $id => $variant)
                             <tr>
-                                <td><input class="bulk-variant" type="checkbox" value="{{ $id }}" aria-label="انتخاب برای تغییر قیمت"></td>
-                                <td><input name="variants[{{ $id }}][color_name]" required value="{{ data_get($variant, 'color_name') }}"></td>
-                                <td><input name="variants[{{ $id }}][size]" required value="{{ data_get($variant, 'size') }}"></td>
-                                <td><input name="variants[{{ $id }}][sku]" dir="ltr" value="{{ data_get($variant, 'sku') }}" placeholder="تولید خودکار"></td>
-                                <td><input name="variants[{{ $id }}][price_toman]" required type="text" inputmode="numeric" data-money-input dir="ltr" value="{{ filled(data_get($variant, 'price_toman')) ? \App\Support\Money::format(data_get($variant, 'price_toman')) : '' }}"></td>
-                                <td><input name="variants[{{ $id }}][compare_at_price_toman]" type="text" inputmode="numeric" data-money-input dir="ltr" value="{{ filled(data_get($variant, 'compare_at_price_toman')) ? \App\Support\Money::format(data_get($variant, 'compare_at_price_toman')) : '' }}"></td>
-                                <td><div class="flex items-center gap-2"><input type="color" class="variant-color-picker h-10 w-12 cursor-pointer rounded-lg border p-1" value="{{ data_get($variant, 'color_hex') ?: '#000000' }}" aria-label="انتخاب رنگ"><span class="variant-color-swatch h-6 w-6 rounded-full border border-slate-300" style="background-color: {{ data_get($variant, 'color_hex') ?: '#000000' }}"></span><input class="variant-color-hex w-28" name="variants[{{ $id }}][color_hex]" dir="ltr" value="{{ data_get($variant, 'color_hex') }}" placeholder="#RRGGBB" pattern="^#[0-9A-Fa-f]{6}$" inputmode="text" aria-label="کد HEX رنگ"></div></td>
-                                <td><input name="variants[{{ $id }}][is_active]" value="1" type="checkbox" @checked(data_get($variant, 'is_active', true))>@if (is_numeric($id) && data_get($variant, 'updated_at'))<input type="hidden" name="variants[{{ $id }}][updated_at]" value="{{ \Illuminate\Support\Carbon::parse(data_get($variant, 'updated_at'))->toISOString() }}">@endif</td>
+                                <td data-label="انتخاب"><input type="hidden" name="variants[{{ $id }}][variant_id]" value="{{ $product->exists && $product->variants->contains('id', (int) $id) ? $id : data_get($variant, 'variant_id') }}"><input class="bulk-variant" type="checkbox" value="{{ $id }}" aria-label="انتخاب برای تغییر قیمت"></td>
+                                <td data-label="رنگ"><input name="variants[{{ $id }}][color_name]" required value="{{ data_get($variant, 'color_name') }}"></td>
+                                <td data-label="اندازه"><input name="variants[{{ $id }}][size]" required value="{{ data_get($variant, 'size') }}"></td>
+                                <td data-label="SKU"><input name="variants[{{ $id }}][sku]" dir="ltr" value="{{ data_get($variant, 'sku') }}" placeholder="تولید خودکار"></td>
+                                <td data-label="قیمت تومان"><input name="variants[{{ $id }}][price_toman]" required type="text" inputmode="numeric" data-money-input dir="ltr" value="{{ filled(data_get($variant, 'price_toman')) ? \App\Support\Money::format(data_get($variant, 'price_toman')) : '' }}"></td>
+                                <td data-label="قیمت قبل"><input name="variants[{{ $id }}][compare_at_price_toman]" type="text" inputmode="numeric" data-money-input dir="ltr" value="{{ filled(data_get($variant, 'compare_at_price_toman')) ? \App\Support\Money::format(data_get($variant, 'compare_at_price_toman')) : '' }}"></td>
+                                <td data-label="رنگ‌نما"><div class="flex items-center gap-2"><input type="color" class="variant-color-picker h-10 w-12 cursor-pointer rounded-lg border p-1" value="{{ data_get($variant, 'color_hex') ?: '#000000' }}" aria-label="انتخاب رنگ"><span class="variant-color-swatch h-6 w-6 rounded-full border border-slate-300" style="background-color: {{ data_get($variant, 'color_hex') ?: '#000000' }}"></span><input class="variant-color-hex w-28" name="variants[{{ $id }}][color_hex]" dir="ltr" value="{{ data_get($variant, 'color_hex') }}" placeholder="#RRGGBB" pattern="^#[0-9A-Fa-f]{6}$" inputmode="text" aria-label="کد HEX رنگ"></div></td>
+                                <td data-label="فعال"><input name="variants[{{ $id }}][is_active]" value="1" type="checkbox" @checked(data_get($variant, 'is_active', true))>@if (filled(data_get($variant, 'updated_at')))<input type="hidden" name="variants[{{ $id }}][updated_at]" value="{{ \Illuminate\Support\Carbon::parse(data_get($variant, 'updated_at'))->toISOString() }}">@endif</td>
+                                <td data-label="حذف"><button type="button" class="text-red-700 underline" data-remove-variant>حذف تنوع</button></td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -175,16 +176,18 @@
                     onclick="const t=document.querySelector('#variant-template').innerHTML.replaceAll('__KEY__',crypto.randomUUID());document.querySelector('#variant-editor-table tbody').insertAdjacentHTML('beforeend',t);window.initVariantColorPickers?.();window.initMoneyInputs?.(document.querySelector('#variant-editor-table tbody tr:last-child'))">
                 افزودن گونه
             </button>
+            <button type="button" class="mt-3 rounded-lg border px-3 py-2" data-generate-variant-combinations>تولید خودکار ترکیب رنگ و سایز</button>
             <template id="variant-template">
                 <tr>
-                    <td><input class="bulk-variant" type="checkbox" value="__KEY__" aria-label="انتخاب برای تغییر قیمت"></td>
-                    <td><input name="variants[__KEY__][color_name]" required></td>
-                    <td><input name="variants[__KEY__][size]" required></td>
-                    <td><input name="variants[__KEY__][sku]" dir="ltr" placeholder="تولید خودکار"></td>
-                    <td><input name="variants[__KEY__][price_toman]" required type="text" inputmode="numeric" data-money-input dir="ltr"></td>
-                    <td><input name="variants[__KEY__][compare_at_price_toman]" type="text" inputmode="numeric" data-money-input dir="ltr"></td>
-                    <td><div class="flex items-center gap-2"><input type="color" class="variant-color-picker h-10 w-12 cursor-pointer rounded-lg border p-1" value="#000000" aria-label="انتخاب رنگ"><span class="variant-color-swatch h-6 w-6 rounded-full border border-slate-300" style="background-color: #000000"></span><input class="variant-color-hex w-28" name="variants[__KEY__][color_hex]" dir="ltr" placeholder="#RRGGBB" pattern="^#[0-9A-Fa-f]{6}$" inputmode="text" aria-label="کد HEX رنگ"></div></td>
-                    <td><input name="variants[__KEY__][is_active]" value="1" type="checkbox" checked></td>
+                    <td data-label="انتخاب"><input type="hidden" name="variants[__KEY__][variant_id]" value=""><input class="bulk-variant" type="checkbox" value="__KEY__" aria-label="انتخاب برای تغییر قیمت"></td>
+                    <td data-label="رنگ"><input name="variants[__KEY__][color_name]" required></td>
+                    <td data-label="اندازه"><input name="variants[__KEY__][size]" required></td>
+                    <td data-label="SKU"><input name="variants[__KEY__][sku]" dir="ltr" placeholder="تولید خودکار"></td>
+                    <td data-label="قیمت تومان"><input name="variants[__KEY__][price_toman]" required type="text" inputmode="numeric" data-money-input dir="ltr"></td>
+                    <td data-label="قیمت قبل"><input name="variants[__KEY__][compare_at_price_toman]" type="text" inputmode="numeric" data-money-input dir="ltr"></td>
+                    <td data-label="رنگ‌نما"><div class="flex items-center gap-2"><input type="color" class="variant-color-picker h-10 w-12 cursor-pointer rounded-lg border p-1" value="#000000" aria-label="انتخاب رنگ"><span class="variant-color-swatch h-6 w-6 rounded-full border border-slate-300" style="background-color: #000000"></span><input class="variant-color-hex w-28" name="variants[__KEY__][color_hex]" dir="ltr" placeholder="#RRGGBB" pattern="^#[0-9A-Fa-f]{6}$" inputmode="text" aria-label="کد HEX رنگ"></div></td>
+                    <td data-label="فعال"><input name="variants[__KEY__][is_active]" value="1" type="checkbox" checked></td>
+                    <td data-label="حذف"><button type="button" class="text-red-700 underline" data-remove-variant>حذف تنوع</button></td>
                 </tr>
             </template>
         </div>
@@ -195,6 +198,77 @@
             <a class="admin-button admin-button--muted" href="{{ route('admin.products.index') }}">بازگشت</a>
         </div>
     </form>
+
+    <script>
+        (() => {
+            const form = document.querySelector('.admin-form[enctype="multipart/form-data"]');
+            const button = document.querySelector('[data-ai-seo-generate]');
+            const status = document.querySelector('[data-ai-seo-status]');
+            const preview = document.querySelector('[data-ai-seo-preview]');
+            const fieldsContainer = document.querySelector('[data-ai-seo-fields]');
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            let suggestions = null;
+            const targetFields = { seo_title: 'meta_title', meta_description: 'meta_description', short_description: 'short_description', description: 'description', suggested_slug: 'slug', image_alt: 'image_alt' };
+            const targetFor = (key) => key === 'image_alt' ? form.querySelector('input[name^="image_alt["]') : form.elements[targetFields[key]];
+            const collect = (selector) => [...form.querySelectorAll(selector)].map((field) => field.value.trim()).filter(Boolean);
+            button?.addEventListener('click', async () => {
+                button.disabled = true;
+                status.textContent = 'در حال تولید محتوای سئو…';
+                preview.hidden = true;
+                const payload = {
+                    name: form.elements.name.value,
+                    category_id: form.elements.category_id.value || null,
+                    material: form.elements.material.value,
+                    composition: form.elements.composition?.value || '',
+                    age_guidance: form.elements.age_guidance?.value || '',
+                    season: form.elements.season?.value || '',
+                    fit_information: form.elements.fit_information?.value || '',
+                    brand: form.elements.brand?.value || 'Kidoki',
+                    description: form.elements.description.value,
+                    short_description: form.elements.short_description.value,
+                    features: (form.elements.selling_points?.value || '').split(/[\n،,]+/).map((item) => item.trim()).filter(Boolean),
+                    colors: collect('input[name^="variants["][name$="[color_name]"]'),
+                    sizes: collect('input[name^="variants["][name$="[size]"]'),
+                };
+                try {
+                    const response = await fetch(@json(route('admin.products.seo-generate')), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, Accept: 'application/json' }, body: JSON.stringify(payload) });
+                    const body = await response.json();
+                    if (!response.ok) throw new Error(body.message || 'تولید محتوا انجام نشد.');
+                    suggestions = body.suggestions;
+                    fieldsContainer.replaceChildren();
+                    Object.entries({ seo_title: 'عنوان SEO', meta_description: 'توضیح SEO', short_description: 'توضیح کوتاه', description: 'توضیحات کامل', suggested_slug: 'Slug پیشنهادی', image_alt: 'متن جایگزین تصویر', keywords: 'عبارت‌های جست‌وجو' }).forEach(([key, label]) => {
+                        const value = Array.isArray(suggestions[key]) ? suggestions[key].join('، ') : suggestions[key];
+                        if (!value) return;
+                        const row = document.createElement('label');
+                        row.className = 'ai-seo-preview__field';
+                        const title = document.createElement('span'); title.textContent = label;
+                        const input = document.createElement(key === 'description' ? 'textarea' : 'input');
+                        input.value = value; input.dataset.aiSeoValue = key;
+                        const applyLabel = document.createElement('span');
+                        if (targetFields[key]) { const target = targetFor(key); const apply = document.createElement('input'); apply.type = 'checkbox'; apply.checked = !target || !target.value.trim(); apply.dataset.aiSeoApply = key; applyLabel.append(apply, document.createTextNode(' اعمال این پیشنهاد')); }
+                        else { applyLabel.textContent = 'پیش‌نمایش؛ فیلد متناظر در فرم موجود نیست'; }
+                        row.append(title, input, applyLabel); fieldsContainer.append(row);
+                    });
+                    preview.hidden = false;
+                    status.textContent = 'پیشنهادها آماده بازبینی هستند؛ هنوز در محصول اعمال نشده‌اند.';
+                } catch (error) {
+                    status.textContent = error.message;
+                } finally {
+                    button.disabled = false;
+                }
+            });
+            document.querySelector('[data-ai-seo-apply]')?.addEventListener('click', () => {
+                fieldsContainer.querySelectorAll('[data-ai-seo-apply]:checked').forEach((checkbox) => {
+                    const value = fieldsContainer.querySelector(`[data-ai-seo-value="${checkbox.dataset.aiSeoApply}"]`)?.value;
+                    const target = targetFor(checkbox.dataset.aiSeoApply);
+                    if (target && value !== undefined) target.value = value;
+                });
+                status.textContent = 'پیشنهادهای انتخاب‌شده در فرم اعمال شدند. محصول هنوز ذخیره نشده است.';
+                preview.hidden = true;
+            });
+            document.querySelector('[data-ai-seo-cancel]')?.addEventListener('click', () => { preview.hidden = true; status.textContent = 'پیشنهادها لغو شدند.'; });
+        })();
+    </script>
 
     @if ($product->exists)
         <form id="bulk-pricing" class="admin-card mt-5 flex flex-wrap items-end gap-3" method="post" action="{{ route('admin.products.prices.preview', $product) }}">
@@ -245,6 +319,8 @@
 @if($product->exists)@push('scripts')<script>document.querySelector('#bulk-pricing')?.addEventListener('submit',event=>{const form=event.currentTarget;form.querySelectorAll('input[name="variant_ids[]"]').forEach(input=>{if(input.value==='')input.remove()});document.querySelectorAll('.bulk-variant:checked').forEach(box=>{const input=document.createElement('input');input.type='hidden';input.name='variant_ids[]';input.value=box.value;form.appendChild(input)});if(!form.querySelector('input[name="variant_ids[]"]')){event.preventDefault();alert('حداقل یک تنوع را انتخاب کنید.')}});</script>@endpush @endif
 @push('scripts')<script>
 window.initVariantColorPickers=()=>document.querySelectorAll('.variant-color-picker').forEach(picker=>{if(picker.dataset.bound)return;picker.dataset.bound='1';const wrapper=picker.closest('div');const hex=wrapper.querySelector('.variant-color-hex');const swatch=wrapper.querySelector('.variant-color-swatch');const valid=value=>/^#[0-9a-fA-F]{6}$/.test(value);const sync=(value,source)=>{if(!valid(value))return;if(source!=='hex')hex.value=value.toUpperCase();picker.value=value;swatch.style.backgroundColor=value};picker.addEventListener('input',()=>sync(picker.value,'picker'));hex.addEventListener('input',()=>{const value=hex.value.trim();if(valid(value))sync(value,'hex')});hex.addEventListener('blur',()=>hex.setCustomValidity(hex.value&&!valid(hex.value)?'کد رنگ باید با قالب #RRGGBB باشد.':''))});window.initVariantColorPickers();
+document.querySelector('#variant-editor-table')?.addEventListener('click',event=>{const button=event.target.closest('[data-remove-variant]');if(!button)return;const row=button.closest('tr');if(row.querySelector('input[name$="[variant_id]"]')?.value&&!window.confirm('این تنوع در ذخیره بعدی غیرفعال می‌شود؛ ادامه می‌دهید؟'))return;row.remove()});
+document.querySelector('[data-generate-variant-combinations]')?.addEventListener('click',()=>{const table=document.querySelector('#variant-editor-table tbody');const rows=[...table.querySelectorAll('tr')];const colors=[...new Set(rows.map(row=>row.querySelector('input[name$="[color_name]"]')?.value.trim()).filter(Boolean))];const sizes=[...new Set(rows.map(row=>row.querySelector('input[name$="[size]"]')?.value.trim()).filter(Boolean))];if(!colors.length||!sizes.length){alert('ابتدا دست‌کم یک رنگ و یک سایز در ردیف‌ها وارد کنید.');return}const existing=new Set(rows.map(row=>{const color=row.querySelector('input[name$="[color_name]"]')?.value.trim().toLocaleLowerCase();const size=row.querySelector('input[name$="[size]"]')?.value.trim().toLocaleLowerCase();return color&&size?`${color}|${size}`:''}));let added=0;colors.forEach(color=>sizes.forEach(size=>{const key=`${color.toLocaleLowerCase()}|${size.toLocaleLowerCase()}`;if(existing.has(key))return;const keyId=crypto.randomUUID();const template=document.querySelector('#variant-template').innerHTML.replaceAll('__KEY__',keyId);table.insertAdjacentHTML('beforeend',template);const row=table.lastElementChild;row.querySelector('input[name$="[color_name]"]').value=color;row.querySelector('input[name$="[size]"]').value=size;existing.add(key);added++;window.initVariantColorPickers?.();window.initMoneyInputs?.(row)}));alert(added?`${added} ترکیب تازه افزوده شد؛ SKU، قیمت و وضعیت را بررسی کنید.`:'همه ترکیب‌های رنگ و سایز از قبل وجود دارند.')});
 const inventoryForm=document.querySelector('#bulk-inventory-form');inventoryForm?.querySelectorAll('[data-inventory-quantity]').forEach(input=>input.addEventListener('input',()=>{const row=input.closest('[data-inventory-row]');const delta=Number(input.value)-Number(input.dataset.original);row.classList.toggle('border-amber-300',delta!==0);row.classList.toggle('bg-amber-50',delta!==0);row.querySelector('[data-delta]').textContent=delta===0?'':'تغییر پیشنهادی: '+(delta>0?'+':'')+delta}));inventoryForm?.addEventListener('submit',event=>{const button=event.currentTarget.querySelector('[data-inventory-submit]');if(button.disabled){event.preventDefault();return}button.disabled=true;button.textContent='در حال ثبت...'});
 (()=>{
     const form=document.querySelector('.admin-form');

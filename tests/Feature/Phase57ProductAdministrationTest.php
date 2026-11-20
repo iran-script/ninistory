@@ -31,8 +31,8 @@ class Phase57ProductAdministrationTest extends TestCase
         preg_match('/<table id="variant-editor-table".*?<\/table>/s', $response->getContent(), $tableMatches);
         $variantTable = $tableMatches[0] ?? '';
 
-        $this->assertSame(8, substr_count($variantTable, '<th>'));
-        $this->assertSame(8, substr_count($variantTable, '<td'));
+        $this->assertSame(9, substr_count($variantTable, '<th>'));
+        $this->assertSame(9, substr_count($variantTable, '<td'));
 
         $response
             ->assertOk()

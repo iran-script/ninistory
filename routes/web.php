@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AddressController;
+use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\ArticleController as AdminArticleController;
 use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\BannerController as AdminBannerController;
@@ -119,6 +120,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('login', [AdminAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
     });
     Route::middleware(['auth', 'admin', 'private.cache'])->group(function () {
+        Route::get('ai-settings', [AiSettingsController::class, 'edit'])->name('ai-settings.edit');
+        Route::put('ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');
+        Route::post('ai-settings/test', [AiSettingsController::class, 'test'])->middleware('throttle:3,1')->name('ai-settings.test');
+        Route::post('products/seo-generate', [AiSettingsController::class, 'generate'])->middleware('throttle:3,1')->name('products.seo-generate');
         Route::post('logout', [AdminAuthController::class, 'destroy'])->name('logout');
         Route::get('/', AdminDashboardController::class)->name('dashboard');
         Route::resource('categories', AdminCategoryController::class)->except(['show']);

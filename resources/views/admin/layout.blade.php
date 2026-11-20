@@ -30,11 +30,13 @@
             <p class="admin-nav__group">تنظیمات</p>
             <a href="{{ route('admin.payments.index') }}" @class(['is-active' => request()->routeIs('admin.payments.*')])><span class="admin-nav__icon" aria-hidden="true">◈</span>پرداخت‌ها</a>
             <a href="{{ route('admin.seo.edit') }}" @class(['is-active' => request()->routeIs('admin.seo.*')])><span class="admin-nav__icon" aria-hidden="true">⚙</span>تنظیمات سئو</a>
+            <a href="{{ route('admin.ai-settings.edit') }}" @class(['is-active' => request()->routeIs('admin.ai-settings.*')])><span class="admin-nav__icon" aria-hidden="true">✦</span>تنظیمات هوش مصنوعی</a>
             <a href="{{ route('admin.content-readiness') }}" @class(['is-active' => request()->routeIs('admin.content-readiness')])><span class="admin-nav__icon" aria-hidden="true">✓</span>آمادگی محتوا</a>
         </nav>
         <div class="admin-side__club"><span>♛</span><div><strong>NiniStory Club</strong><small>باشگاه مشتریان</small></div></div>
         <form method="post" action="{{ route('admin.logout') }}" class="admin-side__logout">@csrf<button type="submit">خروج از پنل <span aria-hidden="true">↗</span></button></form>
     </aside>
+    <button type="button" class="admin-side__backdrop" data-admin-sidebar-close aria-label="بستن منو"></button>
 
     <div class="admin-workspace">
         <header class="admin-topbar">
@@ -59,16 +61,23 @@
 (() => {
     const toggle = document.querySelector('.admin-menu-toggle');
     const sidebar = document.querySelector('#admin-sidebar');
+    const mobileSidebar = window.matchMedia('(max-width: 850px)');
+    const setSidebarOpen = (open) => {
+        sidebar?.classList.toggle('is-open', open);
+        document.body.classList.toggle('admin-sidebar-open', open);
+        toggle?.setAttribute('aria-expanded', String(open));
+    };
     toggle?.addEventListener('click', () => {
-        const open = sidebar.classList.toggle('is-open');
-        toggle.setAttribute('aria-expanded', String(open));
+        setSidebarOpen(!sidebar.classList.contains('is-open'));
     });
+    document.querySelector('[data-admin-sidebar-close]')?.addEventListener('click', () => setSidebarOpen(false));
+    mobileSidebar.addEventListener('change', (event) => { if (!event.matches) setSidebarOpen(false); });
     document.addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
             event.preventDefault();
             document.querySelector('.admin-global-search input')?.focus();
         }
-        if (event.key === 'Escape') sidebar?.classList.remove('is-open');
+        if (event.key === 'Escape') setSidebarOpen(false);
     });
 })();
 </script>

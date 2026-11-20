@@ -108,6 +108,117 @@ class AdminCatalogTest extends TestCase
         $this->assertDatabaseMissing('products', ['slug' => 'draft-variant']);
     }
 
+    public function test_product_creation_accepts_numeric_form_indexes_for_new_variants(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+
+        $this->post(route('admin.products.store'), [
+            'name' => 'Numeric variant index',
+            'slug' => 'numeric-variant-index',
+            'is_active' => 1,
+            'variants' => [0 => ['sku' => '', 'size' => '45', 'color_name' => 'Navy', 'price_toman' => '۱۲۵,۰۰۰', 'is_active' => 1]],
+        ])->assertSessionDoesntHaveErrors();
+
+        $product = Product::query()->where('slug', 'numeric-variant-index')->firstOrFail();
+        $this->assertDatabaseHas('product_variants', [
+            'product_id' => $product->id,
+            'size' => '45',
+            'color_name' => 'Navy',
+            'price_toman' => 125000,
+        ]);
+        $this->assertNotSame('', $product->variants()->firstOrFail()->sku);
+    }
+
+    public function test_product_edit_distinguishes_new_numeric_rows_from_existing_variant_ids(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $product = Product::create(['name' => 'Editable matrix', 'slug' => 'editable-matrix']);
+        $existing = $product->variants()->create(['sku' => 'EDIT-EXISTING', 'size' => '40', 'color_name' => 'Pink', 'price_toman' => 1000]);
+
+        $this->put(route('admin.products.update', $product), [
+            'name' => $product->name,
+            'slug' => $product->slug,
+            'variants_complete' => 1,
+            'variants' => [
+                0 => ['variant_id' => '', 'sku' => '', 'size' => '45', 'color_name' => 'Navy', 'price_toman' => 1200, 'is_active' => 1],
+                $existing->id => ['variant_id' => $existing->id, 'sku' => $existing->sku, 'size' => '40', 'color_name' => 'Pink', 'price_toman' => 1100, 'is_active' => 1],
+            ],
+        ])->assertRedirect();
+
+        $this->assertSame(2, $product->variants()->count());
+        $this->assertSame(1100, $existing->fresh()->price_toman);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'size' => '45', 'color_name' => 'Navy', 'stock_quantity' => 0]);
+    }
+
+    public function test_duplicate_variant_skus_are_rejected_without_partial_product_creation(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $this->post(route('admin.products.store'), [
+            'name' => 'Duplicate SKU test',
+            'slug' => 'duplicate-sku-test',
+            'variants' => [
+                'first' => ['sku' => 'SAME-SKU', 'size' => '40', 'color_name' => 'Pink', 'price_toman' => 1000],
+                'second' => ['sku' => 'same-sku', 'size' => '45', 'color_name' => 'Navy', 'price_toman' => 1000],
+            ],
+        ])->assertSessionHasErrors('variants.second.sku');
+
+        $this->assertDatabaseMissing('products', ['slug' => 'duplicate-sku-test']);
+    }
+
+    public function test_variant_sku_conflict_is_case_insensitive_across_products(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $existing = Product::create(['name' => 'Existing SKU', 'slug' => 'existing-sku']);
+        $existing->variants()->create(['sku' => 'KIDOKI-RED-40', 'size' => '40', 'color_name' => 'Red', 'price_toman' => 1000]);
+
+        $this->post(route('admin.products.store'), [
+            'name' => 'Conflicting SKU',
+            'slug' => 'conflicting-sku',
+            'variants' => [
+                'new-row' => ['sku' => 'kidoki-red-40', 'size' => '45', 'color_name' => 'Blue', 'price_toman' => 1000],
+            ],
+        ])->assertSessionHasErrors('variants.new-row.sku');
+
+        $this->assertDatabaseMissing('products', ['slug' => 'conflicting-sku']);
+    }
+
+    public function test_variant_color_size_conflict_is_case_insensitive_against_persisted_rows(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $product = Product::create(['name' => 'Duplicate combination', 'slug' => 'duplicate-combination']);
+        $variant = $product->variants()->create(['sku' => 'COMBO-1', 'size' => '40', 'color_name' => 'Navy', 'price_toman' => 1000]);
+
+        $this->put(route('admin.products.update', $product), [
+            'name' => $product->name,
+            'slug' => $product->slug,
+            'variants_complete' => 1,
+            'variants' => [
+                $variant->id => ['variant_id' => $variant->id, 'sku' => $variant->sku, 'size' => '40', 'color_name' => 'Navy', 'price_toman' => 1000, 'is_active' => 1],
+                'new-row' => ['variant_id' => '', 'sku' => '', 'size' => '۴۰', 'color_name' => 'navy', 'price_toman' => 1000, 'is_active' => 1],
+            ],
+        ])->assertSessionHasErrors('variants');
+
+        $this->assertSame(1, $product->variants()->count());
+    }
+
+    public function test_edit_rejects_variant_ids_owned_by_another_product(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        $target = Product::create(['name' => 'Target', 'slug' => 'target']);
+        $foreign = Product::create(['name' => 'Foreign', 'slug' => 'foreign']);
+        $foreignVariant = $foreign->variants()->create(['sku' => 'FOREIGN-1', 'size' => '40', 'color_name' => 'Pink', 'price_toman' => 1000]);
+
+        $this->put(route('admin.products.update', $target), [
+            'name' => $target->name,
+            'slug' => $target->slug,
+            'variants_complete' => 1,
+            'variants' => ['row' => ['variant_id' => $foreignVariant->id, 'sku' => 'FOREIGN-1', 'size' => '40', 'color_name' => 'Pink', 'price_toman' => 1000]],
+        ])->assertSessionHasErrors('variants.row.variant_id');
+
+        $this->assertDatabaseMissing('product_variants', ['product_id' => $target->id]);
+        $this->assertSame('FOREIGN-1', $foreignVariant->fresh()->sku);
+    }
+
     public function test_admin_product_create_form_renders(): void
     {
         $this->actingAs(User::factory()->create(['is_admin' => true]));
@@ -117,6 +228,7 @@ class AdminCatalogTest extends TestCase
             ->assertSee('name="name"', false)
             ->assertSee('name="variants[0][sku]"', false)
             ->assertSee('name="save_as_draft"', false)
+            ->assertSee('data-generate-variant-combinations', false)
             ->assertSee('new-image-previews')
             ->assertSee('multipart/form-data', false);
     }

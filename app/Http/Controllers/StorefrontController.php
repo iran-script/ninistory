@@ -245,7 +245,7 @@ class StorefrontController extends Controller
     public function cart(): View
     {
         $items = collect(session('cart', []))->map(function ($quantity, $id) {
-            $variant = ProductVariant::with('product')->find($id);
+            $variant = ProductVariant::with(['product.images' => fn ($query) => $query->where('is_cover', true)])->find($id);
 
             return $variant ? ['variant' => $variant, 'quantity' => $quantity] : null;
         })->filter();

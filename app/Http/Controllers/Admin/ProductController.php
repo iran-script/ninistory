@@ -45,7 +45,7 @@ class ProductController extends Controller
         $data = $this->validateProduct($request);
         $product = DB::transaction(function () use ($data, $request) {
             $product = Product::create($data);
-            $this->saveVariants($request, $product);
+            $this->saveVariants($request, $product, isCreating: true);
             $this->saveImages($request, $product);
 
             return $product;
@@ -165,7 +165,7 @@ class ProductController extends Controller
                 throw ValidationException::withMessages(['variants_complete' => 'برای ذخیره جدول کامل تنوع‌ها، صفحه را دوباره بارگذاری و فرم را کامل ارسال کنید.']);
             }
             if ($request->exists('variants_complete')) {
-                $this->saveVariants($request, $product);
+                $this->saveVariants($request, $product, isCreating: false);
             }
             $this->saveImageOrdering($request, $product);
             $this->saveImages($request, $product);
@@ -282,7 +282,7 @@ class ProductController extends Controller
         return $data;
     }
 
-    private function saveVariants(Request $request, Product $product): void
+    private function saveVariants(Request $request, Product $product, bool $isCreating = false): void
     {
         $submittedVariants = $request->input('variants', []);
         if (is_array($submittedVariants)) {
@@ -312,21 +312,55 @@ class ProductController extends Controller
             throw ValidationException::withMessages(['variants' => 'برای حفظ تنوع‌های فعلی، دست‌کم یک ردیف معتبر وارد کنید.']);
         }
         $keys = [];
+        $skus = [];
+        $existingVariants = $product->variants()->get(['id', 'size', 'color_name']);
+        $submittedVariantIds = [];
+        foreach ($submittedVariants as $submittedKey => $submittedRow) {
+            if (! is_array($submittedRow)) {
+                continue;
+            }
+            $submittedId = array_key_exists('variant_id', $submittedRow)
+                ? (filled($submittedRow['variant_id']) ? (int) $submittedRow['variant_id'] : null)
+                : (! $isCreating && ctype_digit((string) $submittedKey) ? (int) $submittedKey : null);
+            if ($submittedId !== null) {
+                $submittedVariantIds[$submittedId] = true;
+            }
+        }
+        $normalizeCombinationPart = static fn (string $value): string => mb_strtolower(strtr(trim($value), [
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+        ]));
         foreach ($submittedVariants as $id => $row) {
-            if (! is_array($row) || (is_numeric($id) && ! $product->variants()->whereKey($id)->exists())) {
+            if (! is_array($row)) {
                 throw ValidationException::withMessages(['variants' => 'ردیف تنوع نامعتبر است.']);
             }
-            $row = validator($row, ['sku' => ['nullable', 'string', 'max:100', 'unique:product_variants,sku,'.(is_numeric($id) ? $id : 'NULL')], 'size' => ['required', 'string', 'max:40'], 'color_name' => ['required', 'string', 'max:80'], 'color_hex' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'], 'price_toman' => ['required', 'integer', 'min:1'], 'compare_at_price_toman' => ['nullable', 'integer', 'gt:price_toman'], 'is_active' => ['sometimes', 'boolean']])->validate();
-            $combinationKey = mb_strtolower(trim($row['color_name'])).'|'.mb_strtolower(trim($row['size']));
+            $variantId = array_key_exists('variant_id', $row)
+                ? (filled($row['variant_id']) ? (int) $row['variant_id'] : null)
+                : (! $isCreating && ctype_digit((string) $id) ? (int) $id : null);
+            if ($variantId !== null && ($isCreating || ! $product->variants()->whereKey($variantId)->exists())) {
+                throw ValidationException::withMessages(["variants.{$id}.variant_id" => 'تنوع انتخاب‌شده متعلق به این محصول نیست.']);
+            }
+            $row = validator($row, ['variant_id' => ['nullable', 'integer'], 'sku' => ['nullable', 'string', 'max:100'], 'size' => ['required', 'string', 'max:40'], 'color_name' => ['required', 'string', 'max:80'], 'color_hex' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'], 'price_toman' => ['required', 'integer', 'min:1'], 'compare_at_price_toman' => ['nullable', 'integer', 'gt:price_toman'], 'is_active' => ['sometimes', 'boolean']])->validate();
+            $sku = strtoupper(trim((string) ($row['sku'] ?? '')));
+            if ($sku !== '' && ProductVariant::query()->whereRaw('LOWER(sku) = ?', [mb_strtolower($sku)])->when($variantId !== null, fn ($query) => $query->whereKeyNot($variantId))->exists()) {
+                throw ValidationException::withMessages(["variants.{$id}.sku" => 'این کد کالا قبلاً برای محصول دیگری ثبت شده است.']);
+            }
+            if ($sku !== '' && isset($skus[$sku])) {
+                throw ValidationException::withMessages(["variants.{$id}.sku" => 'کد کالا تکراری است.']);
+            }
+            if ($sku !== '') {
+                $skus[$sku] = true;
+            }
+            $combinationKey = $normalizeCombinationPart($row['color_name']).'|'.$normalizeCombinationPart($row['size']);
             if (isset($keys[$combinationKey])) {
                 throw ValidationException::withMessages(['variants' => 'ترکیب رنگ و اندازه تکراری است.']);
             }
             $keys[$combinationKey] = true;
-            $duplicate = $product->variants()->where('size', $row['size'])->where('color_name', $row['color_name'])->when(is_numeric($id), fn ($q) => $q->whereKeyNot($id))->exists();
+            $duplicate = $existingVariants->contains(fn (ProductVariant $variant): bool => $variant->id !== $variantId && isset($submittedVariantIds[$variant->id]) && $normalizeCombinationPart($variant->size) === $normalizeCombinationPart($row['size']) && $normalizeCombinationPart($variant->color_name) === $normalizeCombinationPart($row['color_name']));
             if ($duplicate) {
                 throw ValidationException::withMessages(['variants' => 'ترکیب رنگ و اندازه برای این محصول تکراری است.']);
             }
-            $variant = $product->variants()->whereKey(is_numeric($id) ? $id : 0)->first();
+            $variant = $variantId !== null ? $product->variants()->whereKey($variantId)->first() : null;
             if ($variant) {
                 if (isset($submittedVariants[$id]['updated_at']) && $variant->updated_at?->toISOString() !== Carbon::parse($submittedVariants[$id]['updated_at'])->toISOString()) {
                     throw ValidationException::withMessages(['variants' => 'اطلاعات تنوع تغییر کرده است؛ صفحه را تازه‌سازی و دوباره بررسی کنید.']);
@@ -334,14 +368,20 @@ class ProductController extends Controller
                 if (blank($row['sku'] ?? null)) {
                     $row['sku'] = app(ProductVariantSkuService::class)->generate($product, $row['color_name'], $row['size']);
                 }
-                $variant->update(collect($row)->except(['stock_quantity'])->all() + ['is_active' => (bool) ($row['is_active'] ?? false)]);
+                $variant->update(collect($row)->except(['stock_quantity', 'variant_id', 'updated_at'])->all() + ['is_active' => (bool) ($row['is_active'] ?? false)]);
 
                 continue;
             }
-            app(ProductVariantSkuService::class)->create($product, $row + ['stock_quantity' => 0, 'is_active' => (bool) ($row['is_active'] ?? false)]);
+            app(ProductVariantSkuService::class)->create($product, collect($row)->except(['variant_id', 'updated_at'])->all() + ['stock_quantity' => 0, 'is_active' => (bool) ($row['is_active'] ?? false)]);
         }
 
-        $submittedIds = collect(array_keys($submittedVariants))->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all();
+        $submittedIds = collect($submittedVariants)->map(function (array $row, string|int $key) use ($isCreating): ?int {
+            if (array_key_exists('variant_id', $row)) {
+                return filled($row['variant_id']) ? (int) $row['variant_id'] : null;
+            }
+
+            return ! $isCreating && ctype_digit((string) $key) ? (int) $key : null;
+        })->filter()->all();
         if ($request->boolean('variants_complete')) {
             $omitted = $product->variants()->whereNotIn('id', $submittedIds)->lockForUpdate()->get();
             foreach ($omitted as $variant) {
