@@ -43,12 +43,12 @@
         </div>
         <div class="mobile-header">
             <button type="button" class="icon-button" aria-label="باز کردن منوی دسته‌ها" data-mobile-menu-open aria-expanded="false"><x-icon name="menu" size="23" /></button>
-            <a href="{{ route('home') }}" class="brand brand--mobile"><img src="{{ asset('brand-logo.webp') }}" alt="نشان کیدوکی" width="150" height="150" decoding="async"></a>
-            <div class="mobile-header__actions"><button type="button" class="icon-button" aria-label="جست‌وجو" onclick="document.getElementById('mobile-search').focus()"><x-icon name="search" size="22" /></button><a href="{{ route('cart') }}" aria-label="سبد خرید"><x-icon name="bag" size="22" /><b class="mobile-cart-count" data-cart-count>{{ count(session('cart', [])) }}</b></a></div>
+            <a href="{{ route('home') }}" class="brand brand--mobile"><img src="{{ asset('brand-logo.webp') }}" alt="نشان کیدوکی" width="190" height="190" decoding="async"></a>
+            <div class="mobile-header__actions"><a class="icon-button" href="{{ auth()->check() ? route('orders.index') : route('products.index') }}" aria-label="حساب کاربری"><x-icon name="user" size="21" /></a><a class="icon-button" href="{{ route('cart') }}" aria-label="سبد خرید"><x-icon name="bag" size="21" /><b class="mobile-cart-count" data-cart-count>{{ count(session('cart', [])) }}</b></a></div>
         </div>
         <form action="{{ route('products.index') }}" class="mobile-search" data-live-search>
             <label class="sr-only" for="mobile-search">جست‌وجوی لباس</label>
-            <input id="mobile-search" name="q" value="{{ request('q') }}" placeholder="دنبال چه لباسی برای کوچولوت می‌گردی؟">
+            <input id="mobile-search" name="q" type="search" inputmode="search" value="{{ request('q') }}" placeholder="دنبال چه لباسی می‌گردی؟">
             <button type="submit" aria-label="جست‌وجو"><x-icon name="search" size="20" /></button>
         </form>
         <nav class="main-nav" aria-label="دسته‌بندی‌ها">
