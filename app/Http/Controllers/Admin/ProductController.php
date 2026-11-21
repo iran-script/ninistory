@@ -382,7 +382,7 @@ class ProductController extends Controller
 
             return ! $isCreating && ctype_digit((string) $key) ? (int) $key : null;
         })->filter()->all();
-        if ($request->boolean('variants_complete')) {
+        if ($request->boolean('variants_complete') && ! $isCreating) {
             $omitted = $product->variants()->whereNotIn('id', $submittedIds)->lockForUpdate()->get();
             foreach ($omitted as $variant) {
                 $variant->update(['is_active' => false, 'archived_at' => now()]);

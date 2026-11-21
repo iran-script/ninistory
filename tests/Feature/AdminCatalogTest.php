@@ -129,6 +129,34 @@ class AdminCatalogTest extends TestCase
         $this->assertNotSame('', $product->variants()->firstOrFail()->sku);
     }
 
+    public function test_product_creation_does_not_archive_new_variants_when_form_is_complete(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+
+        $this->post(route('admin.products.store'), [
+            'name' => 'Published variant remains visible',
+            'slug' => 'published-variant-remains-visible',
+            'is_active' => 1,
+            'variants_complete' => 1,
+            'variants' => [
+                'new-variant' => [
+                    'sku' => '',
+                    'size' => '45',
+                    'color_name' => 'Navy',
+                    'price_toman' => 1200,
+                    'is_active' => 1,
+                ],
+            ],
+        ])->assertRedirect();
+
+        $product = Product::query()->where('slug', 'published-variant-remains-visible')->firstOrFail();
+        $variant = $product->variants()->firstOrFail();
+
+        $this->assertTrue($variant->is_active);
+        $this->assertNull($variant->archived_at);
+        $this->assertSame(1, Product::query()->whereKey($product)->whereHas('variants', fn ($query) => $query->where('is_active', true)->whereNull('archived_at'))->count());
+    }
+
     public function test_product_edit_distinguishes_new_numeric_rows_from_existing_variant_ids(): void
     {
         $this->actingAs(User::factory()->create(['is_admin' => true]));
