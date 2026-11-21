@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
         drawerReturnFocus = trigger;
         const item = payload.item || {};
         const status = drawer.querySelector('[data-cart-status]');
-        if (status) status.textContent = payload.message || 'به سبد خرید اضافه شد';
+        if (status) status.textContent = 'به سبد خرید اضافه شد!';
         drawerItem.innerHTML = '';
         if (item.thumbnail) {
             const image = document.createElement('img');

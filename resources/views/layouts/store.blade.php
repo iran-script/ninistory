@@ -89,14 +89,23 @@
     <div class="cart-drawer hidden" data-cart-drawer aria-hidden="true">
         <button type="button" class="cart-drawer__backdrop" data-cart-close aria-label="بستن سبد خرید"></button>
         <aside class="cart-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" tabindex="-1">
-            <div class="flex items-center justify-between gap-3 border-b border-[#efded7] px-5 py-4">
-                <div><p class="text-xs text-[var(--color-muted)]" data-cart-status>افزوده شد</p><h2 id="cart-drawer-title" class="text-xl font-extrabold">سبد خرید شما</h2></div>
+            <div class="cart-drawer__header flex items-center justify-between gap-3 border-b border-[#efded7] px-5 py-4">
+                <div class="cart-drawer__success flex min-w-0 items-center gap-3">
+                    <span class="cart-drawer__success-icon" aria-hidden="true">✓</span>
+                    <div class="min-w-0">
+                        <p class="cart-drawer__success-message" data-cart-status>به سبد خرید اضافه شد!</p>
+                        <h2 id="cart-drawer-title" class="cart-drawer__title text-xl font-extrabold">سبد خرید شما</h2>
+                    </div>
+                </div>
                 <button type="button" class="rounded-full px-3 py-2 text-xl" data-cart-close aria-label="بستن سبد خرید"><x-icon name="close" size="20" /></button>
             </div>
-            <div class="flex items-center gap-3 px-5 py-5" data-cart-item></div>
-            <div class="mt-auto border-t border-[#efded7] px-5 py-4">
-                <div class="mb-4 flex items-center justify-between font-bold"><span>جمع کالاها</span><span data-cart-total>۰ تومان</span></div>
-                <div class="grid grid-cols-2 gap-2"><button type="button" class="rounded-xl border border-[#e6cbd2] px-4 py-3 font-bold" data-cart-close>ادامه خرید</button><a class="rounded-xl bg-[var(--color-action)] px-4 py-3 text-center font-bold text-white" href="{{ route('cart') }}">مشاهده سبد خرید</a></div>
+            <div class="cart-drawer__item flex items-center gap-3 px-5 py-5" data-cart-item></div>
+            <div class="cart-drawer__footer mt-auto border-t border-[#efded7] px-5 py-4">
+                <div class="cart-drawer__total mb-4 flex items-center justify-between font-bold"><span>جمع کالاها</span><span data-cart-total>۰ تومان</span></div>
+                <div class="cart-drawer__actions grid grid-cols-2 gap-2">
+                    <a class="cart-drawer__primary rounded-xl bg-[var(--color-action)] px-4 py-3 text-center font-bold text-white" href="{{ route('cart') }}">مشاهده سبد خرید</a>
+                    <button type="button" class="cart-drawer__secondary rounded-xl border border-[#e6cbd2] px-4 py-3 font-bold" data-cart-close>ادامه خرید</button>
+                </div>
             </div>
         </aside>
     </div>
