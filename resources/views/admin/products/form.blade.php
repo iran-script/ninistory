@@ -35,7 +35,7 @@
             <input name="sku" dir="ltr" value="{{ old('sku', $product->sku) }}">
         </label>
         <label>دسته‌بندی
-            <select name="category_id">
+            <select name="category_id" data-searchable-select>
                 <option value="">انتخاب دسته</option>
                 @foreach ($categories as $category)
                     <option value="{{ $category->id }}" @selected(old('category_id', $product->category_id) == $category->id)>
@@ -73,7 +73,7 @@
             <input name="meta_description" value="{{ old('meta_description', $product->meta_description) }}">
         </label>
         <label>دستور ربات
-            <select name="robots_directive"><option value="">پیش‌فرض</option><option value="index,follow" @selected(old('robots_directive',$product->robots_directive)==='index,follow')>index,follow</option><option value="noindex,follow" @selected(old('robots_directive',$product->robots_directive)==='noindex,follow')>noindex,follow</option><option value="noindex,nofollow" @selected(old('robots_directive',$product->robots_directive)==='noindex,nofollow')>noindex,nofollow</option></select>
+            <select name="robots_directive" data-searchable-select><option value="">پیش‌فرض</option><option value="index,follow" @selected(old('robots_directive',$product->robots_directive)==='index,follow')>index,follow</option><option value="noindex,follow" @selected(old('robots_directive',$product->robots_directive)==='noindex,follow')>noindex,follow</option><option value="noindex,nofollow" @selected(old('robots_directive',$product->robots_directive)==='noindex,nofollow')>noindex,nofollow</option></select>
         </label>
         <label class="admin-span">محتوای تکمیلی SEO
             <textarea name="seo_content" rows="4">{{ old('seo_content', $product->seo_content) }}</textarea>
@@ -81,9 +81,20 @@
         <label>جدول سایز (JSON)
             <textarea name="size_chart" rows="3">{{ old('size_chart', $product->size_chart ? json_encode($product->size_chart, JSON_UNESCAPED_UNICODE) : '') }}</textarea>
         </label>
-        <label><span>انتشار</span>
-            <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $product->is_active))>
-        </label>
+        <fieldset class="admin-span admin-publication" aria-describedby="publication-help">
+            <legend>وضعیت انتشار</legend>
+            <p id="publication-help">انتخاب وضعیت فقط هنگام ذخیره فرم اعمال می‌شود.</p>
+            <div class="admin-publication__options" role="radiogroup" aria-label="وضعیت انتشار محصول">
+                <label class="admin-publication__option">
+                    <input type="radio" name="is_active" value="1" @checked((string) old('is_active', $product->is_active ? '1' : '0') === '1')>
+                    <span><strong>منتشر کردن محصول</strong><small>محصول پس از ذخیره در فروشگاه قابل نمایش خواهد بود.</small></span>
+                </label>
+                <label class="admin-publication__option">
+                    <input type="radio" name="is_active" value="0" @checked((string) old('is_active', $product->is_active ? '1' : '0') !== '1')>
+                    <span><strong>ذخیره به‌صورت پیش‌نویس</strong><small>محصول ذخیره می‌شود اما در فروشگاه نمایش داده نمی‌شود.</small></span>
+                </label>
+            </div>
+        </fieldset>
         <label><span>محصول ویژه</span>
             <input type="checkbox" name="is_featured" value="1" @checked(old('is_featured', $product->is_featured))>
         </label>
@@ -106,13 +117,13 @@
             <textarea name="selling_points" rows="3">{{ old('selling_points', $product->selling_points) }}</textarea>
         </label>
         <div class="admin-span rounded-xl border p-3" id="measurement-editor" data-measurements="{{ e(json_encode(old('measured_dimensions', $product->measured_dimensions ?: []), JSON_UNESCAPED_UNICODE)) }}">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><strong>جدول اندازه‌گیری واقعی (سانتی‌متر)</strong><div class="flex gap-2"><select id="measurement-template" class="rounded-lg border p-2"><option value="set">ست لباس</option><option value="top">بلوز و سویشرت</option><option value="pants">شلوار</option><option value="dress">پیراهن</option><option value="jacket">کاپشن و کت</option><option value="custom">سفارشی</option></select><button type="button" id="apply-measurement-template" class="rounded-lg border px-3 py-2">بارگذاری ستون‌ها</button></div></div>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><strong>جدول اندازه‌گیری واقعی (سانتی‌متر)</strong><div class="flex gap-2"><select id="measurement-template" class="rounded-lg border p-2" data-searchable-select><option value="set">ست لباس</option><option value="top">بلوز و سویشرت</option><option value="pants">شلوار</option><option value="dress">پیراهن</option><option value="jacket">کاپشن و کت</option><option value="custom">سفارشی</option></select><button type="button" id="apply-measurement-template" class="rounded-lg border px-3 py-2">بارگذاری ستون‌ها</button></div></div>
             <div class="overflow-x-auto"><table class="admin-variants min-w-[560px]"><thead id="measurement-head"></thead><tbody id="measurement-body"></tbody></table></div>
             <input type="hidden" name="measured_dimensions" id="measured-dimensions"><button type="button" id="add-measurement-row" class="mt-3 rounded-lg border px-3 py-2">افزودن ردیف اندازه</button>
             <p class="mt-2 text-xs text-slate-500">فقط اندازه‌های واقعی فروشنده را وارد کنید؛ همه مقادیر بر حسب سانتی‌متر و اعشار مجاز است.</p>
         </div>
         <label>Content review
-            <select name="content_review_status"><option value="draft" @selected(old('content_review_status', $product->content_review_status) === 'draft')>Draft</option><option value="needs_review" @selected(old('content_review_status', $product->content_review_status) === 'needs_review')>Needs review</option><option value="approved" @selected(old('content_review_status', $product->content_review_status) === 'approved')>Approved</option></select>
+            <select name="content_review_status" data-searchable-select><option value="draft" @selected(old('content_review_status', $product->content_review_status) === 'draft')>Draft</option><option value="needs_review" @selected(old('content_review_status', $product->content_review_status) === 'needs_review')>Needs review</option><option value="approved" @selected(old('content_review_status', $product->content_review_status) === 'approved')>Approved</option></select>
         </label>
 
         @if ($product->exists && $product->images->isNotEmpty())
@@ -133,7 +144,7 @@
                             <input name="image_caption[{{ $image->id }}]" value="{{ old('image_caption.'.$image->id, $image->caption) }}">
                         </label>
                         <label class="text-xs">Variant image
-                            <select name="image_variant[{{ $image->id }}]"><option value="">General color image</option>@foreach($product->variants as $variant)<option value="{{ $variant->id }}" @selected(old('image_variant.'.$image->id, $image->product_variant_id) == $variant->id)>{{ $variant->color_name }} · {{ $variant->size }}</option>@endforeach</select>
+                            <select name="image_variant[{{ $image->id }}]" data-searchable-select><option value="">General color image</option>@foreach($product->variants as $variant)<option value="{{ $variant->id }}" @selected(old('image_variant.'.$image->id, $image->product_variant_id) == $variant->id)>{{ $variant->color_name }} · {{ $variant->size }}</option>@endforeach</select>
                         </label>
                         <label class="text-xs">ترتیب
                             <input type="number" min="0" max="65535"
@@ -385,5 +396,83 @@ const inventoryForm=document.querySelector('#bulk-inventory-form');inventoryForm
         });
         changed=true;
     });
+})();
+</script>@endpush
+@push('scripts')<script>
+(() => {
+    const normalize = (value) => String(value ?? '').normalize('NFKC').replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/[\s\u200c]+/g, ' ').trim().toLocaleLowerCase();
+    const closeAll = (except) => document.querySelectorAll('[data-searchable-select-wrapper].is-open').forEach((wrapper) => { if (wrapper !== except) { wrapper.classList.remove('is-open'); wrapper.querySelector('.admin-searchable-select__input')?.setAttribute('aria-expanded', 'false'); const list = wrapper.querySelector('.admin-searchable-select__list'); if (list) list.hidden = true; } });
+    const initialize = (select) => {
+        if (select.dataset.searchableInitialized) return;
+        select.dataset.searchableInitialized = '1';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'admin-searchable-select';
+        wrapper.dataset.searchableSelectWrapper = '';
+        select.parentNode.insertBefore(wrapper, select);
+        wrapper.append(select);
+        select.classList.add('admin-searchable-select__native');
+
+        const input = document.createElement('input');
+        input.type = 'search';
+        input.className = 'admin-searchable-select__input';
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-expanded', 'false');
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('spellcheck', 'false');
+        const list = document.createElement('div');
+        list.className = 'admin-searchable-select__list';
+        list.setAttribute('role', 'listbox');
+        list.hidden = true;
+        wrapper.append(input, list);
+
+        const options = () => [...select.options].map((option) => ({ option, label: option.textContent.trim(), search: normalize(`${option.textContent} ${option.value}`) }));
+        let visible = [];
+        let activeIndex = -1;
+        const selectedLabel = () => select.selectedOptions[0]?.textContent.trim() || '';
+        const setActive = (index) => {
+            activeIndex = Math.max(-1, Math.min(index, visible.length - 1));
+            list.querySelectorAll('[role="option"]').forEach((item, itemIndex) => {
+                const active = itemIndex === activeIndex;
+                item.classList.toggle('is-active', active);
+                item.setAttribute('aria-selected', active ? 'true' : 'false');
+                if (active) item.scrollIntoView({ block: 'nearest' });
+            });
+        };
+        const render = (query = '') => {
+            const needle = normalize(query);
+            visible = options().filter(({ search }) => !needle || search.includes(needle));
+            list.replaceChildren();
+            visible.forEach(({ option, label }, index) => {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'admin-searchable-select__option';
+                item.setAttribute('role', 'option');
+                item.dataset.value = option.value;
+                item.textContent = label || '—';
+                item.addEventListener('mousedown', (event) => event.preventDefault());
+                item.addEventListener('click', () => { select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); input.value = label; close(); });
+                list.append(item);
+                if (index === activeIndex) item.classList.add('is-active');
+            });
+            if (!visible.length) { const empty = document.createElement('p'); empty.className = 'admin-searchable-select__empty'; empty.textContent = 'گزینه‌ای پیدا نشد'; list.append(empty); }
+            setActive(visible.length ? Math.min(activeIndex, visible.length - 1) : -1);
+        };
+        const open = () => { closeAll(wrapper); wrapper.classList.add('is-open'); input.setAttribute('aria-expanded', 'true'); list.hidden = false; input.select(); render(input.value === selectedLabel() ? '' : input.value); };
+        const close = () => { wrapper.classList.remove('is-open'); input.setAttribute('aria-expanded', 'false'); input.value = selectedLabel(); list.hidden = true; activeIndex = -1; };
+        input.addEventListener('focus', open);
+        input.addEventListener('input', () => { list.hidden = false; wrapper.classList.add('is-open'); render(input.value); });
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+            if (event.key === 'ArrowDown') { event.preventDefault(); if (!wrapper.classList.contains('is-open')) open(); setActive(activeIndex + 1); return; }
+            if (event.key === 'ArrowUp') { event.preventDefault(); setActive(activeIndex - 1); return; }
+            if (event.key === 'Enter' && activeIndex >= 0 && visible[activeIndex]) { event.preventDefault(); select.value = visible[activeIndex].option.value; select.dispatchEvent(new Event('change', { bubbles: true })); close(); }
+        });
+        select.addEventListener('change', () => { input.value = selectedLabel(); });
+        input.value = selectedLabel();
+        list.hidden = true;
+    };
+    document.querySelectorAll('select[data-searchable-select]').forEach(initialize);
+    document.addEventListener('click', (event) => { if (!event.target.closest('[data-searchable-select-wrapper]')) closeAll(); });
 })();
 </script>@endpush

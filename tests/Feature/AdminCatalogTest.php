@@ -261,6 +261,48 @@ class AdminCatalogTest extends TestCase
             ->assertSee('multipart/form-data', false);
     }
 
+    public function test_admin_product_form_exposes_searchable_selects_and_prominent_publication_choices(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+
+        $this->get(route('admin.products.create'))
+            ->assertOk()
+            ->assertSee('data-searchable-select', false)
+            ->assertSee('name="is_active" value="1"', false)
+            ->assertSee('name="is_active" value="0"', false)
+            ->assertSee('admin-publication__options', false)
+            ->assertSee('data-searchable-select-wrapper', false);
+    }
+
+    public function test_admin_product_publication_state_transitions_between_draft_and_published(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $product = Product::create(['name' => 'Publication state', 'slug' => 'publication-state', 'is_active' => false]);
+        $variant = $product->variants()->create(['sku' => 'PUBLICATION-1', 'size' => '40', 'color_name' => 'Navy', 'price_toman' => 1000, 'is_active' => true]);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), [
+            'name' => $product->name, 'slug' => $product->slug, 'is_active' => 1, 'variants_complete' => 1,
+            'variants' => [$variant->id => ['variant_id' => $variant->id, 'sku' => $variant->sku, 'size' => $variant->size, 'color_name' => $variant->color_name, 'price_toman' => 1000, 'is_active' => 1]],
+        ])->assertRedirect();
+        $this->assertTrue($product->fresh()->is_active);
+
+        $this->actingAs($admin)->put(route('admin.products.update', $product), [
+            'name' => $product->name, 'slug' => $product->slug, 'is_active' => 0, 'variants_complete' => 1,
+            'variants' => [$variant->id => ['variant_id' => $variant->id, 'sku' => $variant->sku, 'size' => $variant->size, 'color_name' => $variant->color_name, 'price_toman' => 1000, 'is_active' => 1]],
+        ])->assertRedirect();
+        $this->assertFalse($product->fresh()->is_active);
+    }
+
+    public function test_admin_product_validation_preserves_submitted_publication_state(): void
+    {
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+
+        $this->from(route('admin.products.create'))
+            ->post(route('admin.products.store'), ['name' => '', 'is_active' => 1])
+            ->assertSessionHasErrors('name')
+            ->assertSessionHasInput('is_active', '1');
+    }
+
     public function test_admin_product_edit_form_renders(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);
