@@ -142,7 +142,10 @@ jobs:
           DB_DATABASE: kidoki_ci
           DB_USERNAME: kidoki_ci
           DB_PASSWORD: kidoki_ci_password
-        run: vendor/bin/phpunit --configuration phpunit.xml tests/Feature/AdminCatalogTest.php tests/Feature/Phase57ProductAdministrationTest.php tests/Feature/StorefrontTest.php
+        run: |
+          vendor/bin/phpunit --configuration phpunit.xml tests/Feature/AdminCatalogTest.php
+          vendor/bin/phpunit --configuration phpunit.xml --filter=test_product_image_upload_and_cover_selection_are_isolated tests/Feature/Phase57ProductAdministrationTest.php
+          vendor/bin/phpunit --configuration phpunit.xml --filter='test_public_category_page_does_not_repeat_subcategories_as_top_chips|test_existing_product_image_uses_the_public_storage_url' tests/Feature/StorefrontTest.php
 
       - name: Verify Redis cache and queue wiring
         shell: bash

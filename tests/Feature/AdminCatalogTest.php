@@ -383,7 +383,7 @@ class AdminCatalogTest extends TestCase
     {
         $admin = User::factory()->create(['is_admin' => true]);
         $product = Product::create(['name' => 'Editable', 'slug' => 'editable', 'is_active' => false]);
-        $product->variants()->create([
+        $variant = $product->variants()->create([
             'sku' => 'EDITABLE-1', 'size' => '3Y', 'color_name' => 'Blue', 'price_toman' => 1000,
         ]);
 
@@ -393,7 +393,7 @@ class AdminCatalogTest extends TestCase
             ->assertSee('name="name"', false)
             ->assertSee('EDITABLE-1')
             ->assertSee('id="bulk-inventory-form"', false)
-            ->assertSee('name="inventory[1][quantity]"', false)
+            ->assertSee('name="inventory['.$variant->id.'][quantity]"', false)
             ->assertSee('ثبت تغییرات موجودی');
     }
 
