@@ -31,11 +31,9 @@ class StorefrontTest extends TestCase
         $html = $response->getContent();
         $verificationCode = 'GviOAGTk0Wtklfj9zgXaahbpCEZjkR4F';
 
-        $this->assertStringContainsString('https://trustseal.enamad.ir/?id=8820788&amp;Code='.$verificationCode, $html);
-        $this->assertStringContainsString('https://trustseal.enamad.ir/logo.aspx?id=8820788&amp;Code='.$verificationCode, $html);
-        $this->assertStringContainsString('alt="نماد اعتماد الکترونیکی فروشگاه کیدوکی"', $html);
-        $this->assertStringContainsString('referrerpolicy="origin"', $html);
-        $this->assertStringContainsString('rel="noopener noreferrer"', $html);
+        $this->assertStringContainsString("<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8820788&Code={$verificationCode}'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8820788&Code={$verificationCode}'", $html);
+        $this->assertStringContainsString("alt='' style='cursor:pointer' code='{$verificationCode}'", $html);
+        $this->assertStringNotContainsString('rel="noopener noreferrer"', $html);
     }
 
     public function test_cart_rejects_quantity_above_stock_and_accepts_valid_variant(): void
