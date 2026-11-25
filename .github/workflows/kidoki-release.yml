@@ -135,7 +135,7 @@ jobs:
 
       - name: Run PostgreSQL product image and publishing regressions
         env:
-          APP_ENV: ci
+          APP_ENV: testing
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
           DB_PORT: 5432
