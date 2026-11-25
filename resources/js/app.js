@@ -95,12 +95,95 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.querySelectorAll('form.admin-form').forEach((form) => form.addEventListener('submit', () => {
-        const button = form.querySelector('button[type="submit"]');
+    document.querySelectorAll('form.admin-form').forEach((form) => form.addEventListener('submit', async (event) => {
+        const productForm = form.querySelector('[data-filepond]');
+        const submitButton = event.submitter instanceof HTMLButtonElement
+            ? event.submitter
+            : form.querySelector('button[type="submit"]');
+
+        if (!productForm) {
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.setAttribute('aria-busy', 'true');
+            }
+
+            return;
+        }
+
+        event.preventDefault();
+
+        if (submitButton?.disabled) return;
+
+        const formData = new FormData(form);
+        if (submitButton?.name) formData.set(submitButton.name, submitButton.value);
+
+        const currentSummary = document.querySelector('[data-validation-summary]');
+        currentSummary?.remove();
+
+        const renderValidationErrors = (messages) => {
+            const summary = document.createElement('section');
+            summary.className = 'admin-card admin-errors mb-5';
+            summary.dataset.validationSummary = '';
+            summary.setAttribute('role', 'alert');
+            summary.setAttribute('aria-live', 'assertive');
+            summary.setAttribute('tabindex', '-1');
+
+            const heading = document.createElement('h2');
+            heading.className = 'font-bold';
+            heading.textContent = 'خطاهای فرم';
+
+            const list = document.createElement('ul');
+            list.className = 'mt-2 list-disc pr-6';
+            messages.forEach((message) => {
+                const item = document.createElement('li');
+                item.textContent = message;
+                list.append(item);
+            });
+
+            summary.append(heading, list);
+            form.before(summary);
+            summary.focus({ preventScroll: true });
+            summary.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+
         if (productImageInput?.files?.length && uploadStatus) uploadStatus.textContent = 'در حال ارسال تصاویر…';
-        if (button) {
-            button.disabled = true;
-            button.setAttribute('aria-busy', 'true');
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.setAttribute('aria-busy', 'true');
+        }
+
+        let navigating = false;
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+
+            if (response.status === 422) {
+                const payload = await response.json().catch(() => ({}));
+                const messages = Object.values(payload.errors || {}).flat().filter((message) => typeof message === 'string');
+                renderValidationErrors(messages.length ? messages : ['اطلاعات فرم معتبر نیست. لطفاً بخش‌های واردشده را بررسی کنید.']);
+
+                return;
+            }
+
+            if (!response.ok) throw new Error('ذخیره تغییرات محصول انجام نشد. لطفاً دوباره تلاش کنید.');
+
+            navigating = true;
+            window.location.assign(response.url || form.action);
+        } catch (error) {
+            const message = error instanceof TypeError
+                ? 'ارتباط با فروشگاه برقرار نشد. لطفاً اتصال را بررسی و دوباره تلاش کنید.'
+                : error.message;
+            renderValidationErrors([message]);
+        } finally {
+            if (!navigating && submitButton) {
+                submitButton.disabled = false;
+                submitButton.removeAttribute('aria-busy');
+            }
         }
     }));
     const normalizeMoneyDigits = (value) => String(value ?? '')

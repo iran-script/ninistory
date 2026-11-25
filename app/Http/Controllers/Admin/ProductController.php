@@ -283,9 +283,10 @@ class ProductController extends Controller
             $variants = $request->input('variants', []);
             $request->validate(['variants' => ['required', 'array', 'min:1']]);
             if (! collect($variants)->contains(fn ($variant) => filter_var($variant['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN))) {
-                throw ValidationException::withMessages(['variants' => 'Published products require at least one active variant.']);
+                throw ValidationException::withMessages(['variants' => 'برای انتشار محصول، دست‌کم یک تنوع فعال لازم است.']);
             }
-            if (($product?->images()->exists() ?? false) === false && ! $request->hasFile('images')) {
+            $wasAlreadyPublished = $product?->is_active === true;
+            if (! $wasAlreadyPublished && ($product?->images()->exists() ?? false) === false && ! $request->hasFile('images')) {
                 throw ValidationException::withMessages(['images' => 'برای انتشار، دست‌کم یک تصویر محصول لازم است.']);
             }
         }
@@ -490,7 +491,9 @@ class ProductController extends Controller
 
         $validIds = $product->images()->pluck('id')->map(fn ($id) => (string) $id)->all();
         validator(['image_order' => $order], ['image_order' => ['array'], 'image_order.*' => ['integer', 'min:0', 'max:65535']])->validate();
-        abort_unless(count(array_diff(array_keys($order), $validIds)) === 0, 422);
+        if (count(array_diff(array_keys($order), $validIds)) !== 0) {
+            throw ValidationException::withMessages(['image_order' => 'ترتیب تصاویر ارسالی معتبر نیست.']);
+        }
 
         foreach ($order as $id => $sortOrder) {
             $product->images()->whereKey($id)->update(['sort_order' => (int) $sortOrder]);
@@ -500,7 +503,9 @@ class ProductController extends Controller
             $product->images()->whereKey($id)->update(['alt_text' => $value ?: $product->name]);
         }
         validator(['image_caption' => $captions], ['image_caption' => ['array'], 'image_caption.*' => ['nullable', 'string', 'max:180']])->validate();
-        abort_unless(count(array_diff(array_keys($captions), $validIds)) === 0, 422);
+        if (count(array_diff(array_keys($captions), $validIds)) !== 0) {
+            throw ValidationException::withMessages(['image_caption' => 'زیرنویس تصاویر ارسالی معتبر نیست.']);
+        }
         foreach ($captions as $id => $value) {
             $product->images()->whereKey($id)->update(['caption' => $value]);
         }

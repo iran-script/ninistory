@@ -2,7 +2,7 @@
 
 @section('content')
     @if ($product->exists)<div class="admin-product-tools"><a class="admin-button admin-button--muted" target="_blank" rel="nofollow" href="{{ route('admin.products.preview', $product) }}">پیش‌نمایش واقعی محصول</a><form method="post" action="{{ route('admin.products.duplicate', $product) }}" onsubmit="return confirm('یک پیش‌نویس مستقل از این محصول ساخته شود؟ موجودی تنوع‌ها صفر خواهد بود.')">@csrf<button class="admin-button admin-button--soft" type="submit">ساخت کپی پیش‌نویس</button></form></div>@endif
-    @if ($errors->any())<section class="admin-card admin-errors mb-5"><h2 class="font-bold">خطاهای فرم</h2><ul class="mt-2 list-disc pr-6">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></section>@endif
+    @if ($errors->any())<section class="admin-card admin-errors mb-5" data-validation-summary role="alert" aria-live="assertive" tabindex="-1"><h2 class="font-bold">خطاهای فرم</h2><ul class="mt-2 list-disc pr-6">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></section>@endif
     <h1 class="mb-5 text-3xl font-extrabold">
         {{ $product->exists ? 'ویرایش محصول' : 'محصول تازه' }}
     </h1>
