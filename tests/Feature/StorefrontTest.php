@@ -25,6 +25,19 @@ class StorefrontTest extends TestCase
         $this->get('/products?q=سرهمی')->assertOk()->assertSee('سرهمی');
     }
 
+    public function test_storefront_footer_exposes_the_official_enamad_trust_seal(): void
+    {
+        $response = $this->get('/')->assertOk();
+        $html = $response->getContent();
+        $verificationCode = 'GviOAGTk0Wtklfj9zgXaahbpCEZjkR4F';
+
+        $this->assertStringContainsString('https://trustseal.enamad.ir/?id=8820788&amp;Code='.$verificationCode, $html);
+        $this->assertStringContainsString('https://trustseal.enamad.ir/logo.aspx?id=8820788&amp;Code='.$verificationCode, $html);
+        $this->assertStringContainsString('alt="نماد اعتماد الکترونیکی فروشگاه کیدوکی"', $html);
+        $this->assertStringContainsString('referrerpolicy="origin"', $html);
+        $this->assertStringContainsString('rel="noopener noreferrer"', $html);
+    }
+
     public function test_cart_rejects_quantity_above_stock_and_accepts_valid_variant(): void
     {
         $this->seed();
