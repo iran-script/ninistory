@@ -3,15 +3,42 @@
 @section('content')
 @php
     $validImages = $product->images->filter(fn ($image) => \Illuminate\Support\Facades\Storage::disk('public')->exists($image->path));
+    $primaryImage = $validImages->firstWhere('is_cover', true) ?: $validImages->first();
     $availableVariants = $product->variants->where('is_active', true)->whereNull('archived_at')->values();
     $colors = $availableVariants->unique('color_name')->values();
     $sizes = $availableVariants->unique('size')->values();
-    $variantGallery = fn ($variant) => ($validImages->where('product_variant_id', $variant->id)->isNotEmpty() ? $validImages->where('product_variant_id', $variant->id) : ($validImages->where('color_name', $variant->color_name)->whereNull('product_variant_id')->isNotEmpty() ? $validImages->where('color_name', $variant->color_name)->whereNull('product_variant_id') : $validImages->whereNull('color_name')->whereNull('product_variant_id')))->map(fn ($image) => asset('storage/'.$image->path))->values();
+    $variantGallery = fn ($variant) => ($validImages->where('product_variant_id', $variant->id)->isNotEmpty() ? $validImages->where('product_variant_id', $variant->id) : ($validImages->where('color_name', $variant->color_name)->whereNull('product_variant_id')->isNotEmpty() ? $validImages->where('color_name', $variant->color_name)->whereNull('product_variant_id') : $validImages->whereNull('color_name')->whereNull('product_variant_id')))->sortByDesc(fn ($image) => (int) $image->is_cover)->map(fn ($image) => \Illuminate\Support\Facades\Storage::disk('public')->url($image->path))->values();
 @endphp
 <section class="product-detail mx-auto grid max-w-[1440px] gap-8 px-4 py-6 md:grid-cols-[1.05fr_.95fr] md:gap-12 md:px-8 md:py-10" data-product-configurator>
     <div class="min-w-0">
-        <div class="product-detail__main-image relative aspect-square overflow-hidden rounded-3xl bg-[#f8eeeb] md:aspect-[.95/1]" data-gallery-main><x-product-media :product="$product" :image="$validImages->first()" loading="eager" /></div>
-        @if ($validImages->count() > 1)<div class="mt-3 flex gap-3 overflow-x-auto" aria-label="تصاویر محصول">@foreach ($validImages as $image)<button type="button" class="product-thumbnail h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white" data-gallery-image="{{ asset('storage/'.$image->path) }}" data-gallery-alt="{{ $image->alt_text ?: $product->name }}" aria-label="نمایش تصویر {{ $loop->iteration }}"><img class="h-full w-full object-contain" src="{{ asset('storage/'.$image->path) }}" alt="" loading="lazy"></button>@endforeach</div>@endif
+        <div class="product-detail__main-image relative aspect-square overflow-hidden rounded-3xl bg-[#f8eeeb] md:aspect-[.95/1]" data-gallery-main><x-product-media :product="$product" :image="$primaryImage" loading="eager" sizes="(max-width: 767px) 100vw, (min-width: 768px) 55vw, 700px" /></div>
+        @if ($validImages->count() > 1)
+            <div class="product-gallery__thumbnails mt-3 flex gap-3 overflow-x-auto" data-gallery-thumbnails role="group" aria-label="تصاویر محصول">
+                @foreach ($validImages as $image)
+                    @php
+                        $imageUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($image->path);
+                        $imageSrcset = collect(app(\App\Services\ImageVariantService::class)->responsiveSources($image->path))
+                            ->map(fn ($url, $width) => $url.' '.$width.'w')
+                            ->implode(', ');
+                        $isSelectedImage = $image->is($primaryImage);
+                    @endphp
+                    <button
+                        type="button"
+                        class="product-thumbnail h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white {{ $isSelectedImage ? 'is-active' : '' }}"
+                        data-gallery-image="{{ $imageUrl }}"
+                        data-gallery-srcset="{{ $imageSrcset }}"
+                        data-gallery-sizes="(max-width: 767px) 100vw, (min-width: 768px) 55vw, 700px"
+                        data-gallery-alt="{{ $image->alt_text ?: $product->name }}"
+                        data-gallery-width="{{ $image->width ?: 800 }}"
+                        data-gallery-height="{{ $image->height ?: 1000 }}"
+                        aria-label="نمایش تصویر {{ $loop->iteration }}"
+                        aria-pressed="{{ $isSelectedImage ? 'true' : 'false' }}"
+                    >
+                        <img class="h-full w-full object-contain" src="{{ $imageUrl }}" alt="" width="80" height="80" loading="lazy" decoding="async">
+                    </button>
+                @endforeach
+            </div>
+        @endif
     </div>
     <div class="md:py-4"><nav class="mb-5 text-sm text-[var(--color-muted)]"><a href="{{ route('home') }}">خانه</a> / <a href="{{ route('products.index') }}">محصولات</a> / {{ $product->category?->name }}</nav><h1 class="text-2xl font-extrabold text-[var(--color-wine)] md:text-4xl">{{ $product->name }}</h1><p class="mt-3 leading-8 text-[#6e6263]">{{ $product->description ?: $product->short_description }}</p>
         @if($product->size_chart)<section class="mt-5 rounded-2xl bg-white p-4" aria-labelledby="size-guide-title"><h2 id="size-guide-title" class="font-bold">راهنمای اندازه</h2><div class="mt-3 overflow-x-auto"><table class="w-full min-w-[360px] text-right text-sm"><tbody>@foreach($product->size_chart as $row)<tr>@foreach((array) $row as $value)<td class="border-b p-2">{{ $value }}</td>@endforeach</tr>@endforeach</tbody></table></div><p class="mt-2 text-xs text-slate-500">اندازه‌ها باید بر اساس اندازه‌گیری واقعی محصول تأیید شوند و ممکن است اندکی تفاوت داشته باشند.</p></section>@endif
@@ -25,5 +52,4 @@
         </form><div class="mt-6 grid grid-cols-3 rounded-2xl border border-[var(--color-border)] bg-white p-4 text-center text-xs"><span>ارسال سراسر ایران</span><span>پرداخت امن</span><span>۷ روز بازگشت</span></div><div class="mt-6 rounded-2xl bg-white p-5"><h2 class="font-bold">روش نگهداری</h2><p class="mt-2">{{ $product->care_instructions ?: 'با آب سرد و لباس‌های هم‌رنگ بشویید.' }}</p></div>
     </div>
 </section>
-@push('scripts')<script>document.querySelectorAll('[data-gallery-image]').forEach((button)=>button.addEventListener('click',()=>{const main=document.querySelector('[data-gallery-main] img');if(main){main.src=button.dataset.galleryImage;main.alt=button.dataset.galleryAlt}}));</script>@endpush
 @endsection

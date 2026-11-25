@@ -98,6 +98,82 @@ class StorefrontTest extends TestCase
             ->assertSee('/storage/'.$imagePath, false);
     }
 
+    public function test_product_gallery_uses_the_cover_image_even_when_it_is_not_first_in_storage_order(): void
+    {
+        Storage::fake('public');
+        $product = Product::create(['name' => 'Gallery product', 'slug' => 'gallery-product', 'is_active' => true]);
+        $product->variants()->create([
+            'sku' => 'GALLERY-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000,
+            'stock_quantity' => 2, 'is_active' => true,
+        ]);
+        $firstPath = 'products/'.$product->id.'/side.jpg';
+        $coverPath = 'products/'.$product->id.'/cover.jpg';
+        Storage::disk('public')->put($firstPath, 'side-image');
+        Storage::disk('public')->put($coverPath, 'cover-image');
+        Storage::disk('public')->put('products/'.$product->id.'/cover-400.webp', 'cover-small');
+        $product->images()->create([
+            'path' => $firstPath, 'width' => 600, 'height' => 800, 'alt_text' => 'Side view',
+            'sort_order' => 0, 'is_cover' => false,
+        ]);
+        $cover = $product->images()->create([
+            'path' => $coverPath, 'width' => 1200, 'height' => 1500, 'alt_text' => 'Front view',
+            'sort_order' => 1, 'is_cover' => true,
+        ]);
+
+        $html = $this->get(route('products.show', $product))->assertOk()->getContent();
+
+        $this->assertStringContainsString('/storage/'.$coverPath, $html);
+        $this->assertStringContainsString('alt="Front view" width="1200" height="1500"', $html);
+        $this->assertStringContainsString('/storage/products/'.$product->id.'/cover-400.webp 400w', $html);
+        $this->assertStringContainsString('data-gallery-thumbnails', $html);
+        $this->assertStringContainsString('data-gallery-image="'.Storage::disk('public')->url($coverPath).'"', $html);
+        $this->assertStringContainsString('aria-pressed="true"', $html);
+        $this->assertStringContainsString('data-gallery-alt="Front view"', $html);
+        $this->assertStringContainsString('data-gallery-width="1200"', $html);
+        $this->assertStringContainsString('loading="lazy" decoding="async"', $html);
+        $this->assertTrue($cover->is_cover);
+    }
+
+    public function test_single_image_product_has_a_prioritized_main_image_without_a_thumbnail_strip(): void
+    {
+        Storage::fake('public');
+        $product = Product::create(['name' => 'Single image product', 'slug' => 'single-image-product', 'is_active' => true]);
+        $product->variants()->create([
+            'sku' => 'SINGLE-GALLERY-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000,
+            'stock_quantity' => 2, 'is_active' => true,
+        ]);
+        $imagePath = 'products/'.$product->id.'/single.jpg';
+        Storage::disk('public')->put($imagePath, 'single-image');
+        $product->images()->create([
+            'path' => $imagePath, 'width' => 800, 'height' => 1000, 'alt_text' => 'Single image',
+            'sort_order' => 0, 'is_cover' => true,
+        ]);
+
+        $html = $this->get(route('products.show', $product))->assertOk()->getContent();
+
+        $this->assertStringContainsString('data-gallery-active-image', $html);
+        $this->assertStringContainsString('alt="Single image" width="800" height="1000"', $html);
+        $this->assertStringContainsString('loading="eager"', $html);
+        $this->assertStringContainsString('decoding="async"', $html);
+        $this->assertStringContainsString('fetchpriority="high"', $html);
+        $this->assertStringNotContainsString('data-gallery-thumbnails', $html);
+    }
+
+    public function test_product_without_images_keeps_the_existing_gallery_fallback(): void
+    {
+        $product = Product::create(['name' => 'Image fallback product', 'slug' => 'image-fallback-product', 'is_active' => true]);
+        $product->variants()->create([
+            'sku' => 'FALLBACK-GALLERY-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000,
+            'stock_quantity' => 2, 'is_active' => true,
+        ]);
+
+        $html = $this->get(route('products.show', $product))->assertOk()->getContent();
+
+        $this->assertStringContainsString('product-media__fallback', $html);
+        $this->assertStringNotContainsString('data-gallery-thumbnails', $html);
+        $this->assertStringNotContainsString('data-gallery-active-image', $html);
+    }
+
     public function test_product_page_exposes_only_real_active_variant_combinations(): void
     {
         $product = Product::create(['name' => 'Choice product', 'slug' => 'choice-product', 'is_active' => true]);

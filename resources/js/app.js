@@ -540,6 +540,37 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-filter-close]:not(.catalog-filter-backdrop)').forEach((button) => button.addEventListener('click', closeFilters));
     filterBackdrop?.addEventListener('click', closeFilters);
 
+    const selectGalleryImage = (gallery, button) => {
+        const mainImage = gallery?.querySelector('[data-gallery-active-image]');
+        if (!mainImage || !button) return;
+
+        if (button.dataset.gallerySrcset) {
+            mainImage.srcset = button.dataset.gallerySrcset;
+        } else {
+            mainImage.removeAttribute('srcset');
+        }
+        if (button.dataset.gallerySizes) mainImage.sizes = button.dataset.gallerySizes;
+
+        mainImage.src = button.dataset.galleryImage;
+        mainImage.alt = button.dataset.galleryAlt || '';
+        if (button.dataset.galleryWidth) mainImage.width = Number(button.dataset.galleryWidth);
+        if (button.dataset.galleryHeight) mainImage.height = Number(button.dataset.galleryHeight);
+
+        gallery.parentElement?.querySelectorAll('[data-gallery-thumbnails] [data-gallery-image]').forEach((thumbnail) => {
+            const isSelected = thumbnail === button;
+            thumbnail.classList.toggle('is-active', isSelected);
+            thumbnail.setAttribute('aria-pressed', String(isSelected));
+        });
+    };
+
+    document.querySelectorAll('[data-gallery-main]').forEach((gallery) => {
+        const thumbnails = gallery.parentElement?.querySelector('[data-gallery-thumbnails]');
+        thumbnails?.addEventListener('click', (event) => {
+            const target = event.target instanceof Element ? event.target.closest('[data-gallery-image]') : null;
+            if (target && thumbnails.contains(target)) selectGalleryImage(gallery, target);
+        });
+    });
+
     document.querySelectorAll('[data-product-configurator]').forEach((configurator) => {
         const select = configurator.querySelector('[data-variant-select]');
         if (!select) return;
@@ -561,8 +592,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (gallery && option.dataset.images) {
                 const images = JSON.parse(option.dataset.images || '[]');
                 if (images.length) {
-                    const image = gallery.querySelector('img');
-                    if (image) image.src = images[0];
+                    const galleryThumbnails = gallery.parentElement?.querySelectorAll('[data-gallery-thumbnails] [data-gallery-image]') || [];
+                    const thumbnail = [...galleryThumbnails].find((candidate) => candidate.dataset.galleryImage === images[0]);
+                    if (thumbnail) {
+                        selectGalleryImage(gallery, thumbnail);
+                    } else {
+                        const image = gallery.querySelector('[data-gallery-active-image]');
+                        if (image) {
+                            image.removeAttribute('srcset');
+                            image.src = images[0];
+                            image.alt = `${document.querySelector('.product-detail h1')?.textContent?.trim() || ''} ${option.dataset.color || ''} ${option.dataset.size || ''}`.trim();
+                        }
+                        gallery.parentElement?.querySelectorAll('[data-gallery-thumbnails] [data-gallery-image]').forEach((candidate) => {
+                            candidate.classList.remove('is-active');
+                            candidate.setAttribute('aria-pressed', 'false');
+                        });
+                    }
                 }
             }
             colorButtons.forEach((button) => button.classList.toggle('is-selected', button.dataset.color === option.dataset.color));
