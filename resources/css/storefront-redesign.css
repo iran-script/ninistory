@@ -282,7 +282,7 @@ body { background: var(--kidoki-cream); color: var(--kidoki-ink); }
     .brand--mobile { height: 50px; }
     .campaign-slider { border-radius: 24px; }
     .campaign-slider__track { aspect-ratio: 4 / 5; min-height: 0; }
-    .campaign-slide__media img { object-position: center top; }
+    .campaign-slide__media img { object-fit: contain; object-position: center; }
     .campaign-slide__wash { background: linear-gradient(180deg, transparent 32%, rgb(255 250 245 / 24%) 48%, rgb(255 250 245 / 94%) 83%); }
     .campaign-slide__copy { inset-inline: 20px; top: auto; bottom: 56px; width: auto; transform: none; }
     .campaign-slide--center .campaign-slide__copy, .campaign-slide--left .campaign-slide__copy { inset-inline: 20px; transform: none; text-align: right; align-items: flex-start; }

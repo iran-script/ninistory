@@ -151,10 +151,11 @@ class Phase57ProductAdministrationTest extends TestCase
     {
         $admin = User::factory()->create(['is_admin' => true]);
         $product = Product::create(['name' => 'Gallery set', 'slug' => 'gallery-set', 'is_active' => false]);
-        $response = $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Gallery set', 'slug' => 'gallery-set', 'images' => [UploadedFile::fake()->image('one.jpg', 1200, 1200), UploadedFile::fake()->image('two.jpg', 1200, 1200)]]);
+        $response = $this->actingAs($admin)->put(route('admin.products.update', $product), ['name' => 'Gallery set', 'slug' => 'gallery-set', 'images' => [UploadedFile::fake()->image('same.jpg', 1200, 1200), UploadedFile::fake()->image('same.jpg', 1200, 1200)]]);
         $response->assertRedirect();
         $this->assertDatabaseCount('product_images', 2);
         $images = $product->fresh()->images;
+        $this->assertNotSame($images->first()->path, $images->last()->path);
         $this->actingAs($admin)->post(route('admin.products.images.cover', [$product, $images->last()]))->assertRedirect();
         $this->assertTrue((bool) $images->last()->fresh()->is_cover);
         $this->assertFalse((bool) $images->first()->fresh()->is_cover);

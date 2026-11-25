@@ -1,4 +1,108 @@
+import * as FilePond from 'filepond';
+import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
+import FilePondPluginFileValidateSize from 'filepond-plugin-file-validate-size';
+import FilePondPluginImagePreview from 'filepond-plugin-image-preview';
+import FilePondPluginImageExifOrientation from 'filepond-plugin-image-exif-orientation';
+import TomSelect from 'tom-select';
+import 'filepond/dist/filepond.min.css';
+import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.min.css';
+import 'tom-select/dist/css/tom-select.css';
+
+FilePond.registerPlugin(
+    FilePondPluginFileValidateType,
+    FilePondPluginFileValidateSize,
+    FilePondPluginImagePreview,
+    FilePondPluginImageExifOrientation,
+);
+
+const normalizeSelectText = (value) => String(value ?? '')
+    .normalize('NFKC')
+    .replace(/[يى]/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/[\s\u200c\u200d]+/g, ' ')
+    .trim()
+    .toLocaleLowerCase();
+
+window.initSearchableSelects = (root = document) => {
+    root.querySelectorAll('select[data-tom-select]').forEach((select) => {
+        if (select.tomselect) return;
+
+        new TomSelect(select, {
+            create: false,
+            allowEmptyOption: true,
+            maxOptions: 200,
+            dropdownParent: 'body',
+            searchField: ['text', 'value'],
+            score: (search) => (option) => normalizeSelectText(`${option.text} ${option.value}`).includes(normalizeSelectText(search)) ? 1 : 0,
+            render: {
+                no_results: () => '<div class="no-results">گزینه‌ای پیدا نشد</div>',
+            },
+            onDropdownOpen: (dropdown) => dropdown.setAttribute('dir', 'rtl'),
+        });
+    });
+};
+
+window.initSearchableSelects();
+
 document.addEventListener('DOMContentLoaded', () => {
+    const productImageInput = document.querySelector('[data-filepond]');
+    const uploadStatus = document.querySelector('#image-upload-status');
+    const primaryImageSelect = document.querySelector('#primary-upload-image');
+    const primaryImageIndex = document.querySelector('#cover-image-index');
+    if (productImageInput) {
+        FilePond.setOptions({
+            labelIdle: 'تصاویر را اینجا رها کنید یا <span class="filepond--label-action">انتخاب کنید</span>',
+            labelFileTypeNotAllowed: 'این نوع فایل پشتیبانی نمی‌شود.',
+            fileValidateTypeLabelExpectedTypes: 'فقط JPG، PNG و WebP',
+            labelMaxFileSizeExceeded: 'حجم فایل بیش از حد مجاز است.',
+            labelMaxFileSize: 'حداکثر حجم هر تصویر ۵ مگابایت است.',
+            labelMaxTotalFileSizeExceeded: 'مجموع حجم تصاویر بیش از حد مجاز است.',
+            labelMaxTotalFileSize: 'حداکثر مجموع حجم تصاویر ۱۸ مگابایت است.',
+            labelFileRemoveError: 'حذف تصویر انجام نشد.',
+        });
+        let uploadedFiles = [];
+        const updatePrimaryImage = () => {
+            const selectedIndex = uploadedFiles.findIndex((file) => file.id === primaryImageSelect?.value);
+            if (primaryImageIndex) primaryImageIndex.value = selectedIndex < 0 ? '' : String(selectedIndex);
+        };
+        primaryImageSelect?.addEventListener('change', updatePrimaryImage);
+        FilePond.create(productImageInput, {
+            allowMultiple: true,
+            allowReorder: true,
+            allowProcess: false,
+            storeAsFile: true,
+            maxFiles: Number(productImageInput.dataset.maxFiles || 6),
+            maxFileSize: '5MB',
+            maxTotalFileSize: '18MB',
+            acceptedFileTypes: ['image/jpeg', 'image/png', 'image/webp'],
+            labelFileProcessing: 'آماده‌سازی تصویر',
+            onupdatefiles: (files) => {
+                uploadedFiles = files;
+                const currentSelection = primaryImageSelect?.value;
+                primaryImageSelect?.replaceChildren(new Option('انتخاب اولین تصویر', ''));
+                files.forEach((file, index) => primaryImageSelect?.add(new Option(`${index + 1}. ${file.filename}`, file.id)));
+                if (currentSelection && files.some((file) => file.id === currentSelection)) {
+                    primaryImageSelect.value = currentSelection;
+                } else if (files[0]) {
+                    primaryImageSelect.value = files[0].id;
+                }
+                updatePrimaryImage();
+                if (uploadStatus) uploadStatus.textContent = files.length ? `${files.length} تصویر آماده ارسال است.` : '';
+            },
+            onaddfile: (error, file) => {
+                if (error && uploadStatus) uploadStatus.textContent = `${file.filename}: ${error.main}`;
+            },
+        });
+    }
+
+    document.querySelectorAll('form.admin-form').forEach((form) => form.addEventListener('submit', () => {
+        const button = form.querySelector('button[type="submit"]');
+        if (productImageInput?.files?.length && uploadStatus) uploadStatus.textContent = 'در حال ارسال تصاویر…';
+        if (button) {
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        }
+    }));
     const normalizeMoneyDigits = (value) => String(value ?? '')
         .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
         .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));

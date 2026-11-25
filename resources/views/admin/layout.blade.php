@@ -45,6 +45,7 @@
                 <span aria-hidden="true">⌕</span><input name="q" value="{{ request()->routeIs('admin.products.*') ? request('q') : '' }}" placeholder="جستجو در نام محصول یا SKU..." aria-label="جستجوی محصولات و کد کالا">
                 <kbd>Ctrl K</kbd>
             </form>
+            <a class="admin-home-link" href="{{ route('home') }}"><x-icon name="home" size="16" /><span>صفحه اصلی سایت</span></a>
             <div class="admin-topbar__actions">
                 <a class="admin-icon-button" href="{{ route('admin.inventory.index') }}" aria-label="هشدارهای موجودی">♧<i></i></a>
                 <div class="admin-profile"><span class="admin-profile__avatar">{{ mb_substr(auth()->user()->name, 0, 1) }}</span><span><strong>{{ auth()->user()->name }}</strong><small>مدیر فروشگاه</small></span><span aria-hidden="true">⌄</span></div>

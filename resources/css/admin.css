@@ -50,6 +50,9 @@
 .admin-topbar__actions { display: flex; align-items: center; gap: 20px; margin-right: auto; }
 .admin-icon-button { position: relative; display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid #eee9f5; border-radius: 12px; color: #5e5274; font-size: 21px; }
 .admin-icon-button i { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border: 1px solid #fff; border-radius: 50%; background: #eb63a2; }
+.admin-home-link { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; flex: none; padding: 0 15px; border: 1px solid #e8d8ea; border-radius: 12px; color: #662a3e; background: #fff7f1; font-size: 12px; font-weight: 750; text-decoration: none; white-space: nowrap; }
+.admin-home-link:hover, .admin-home-link:focus-visible { border-color: #efded7; background: #fdebf0; }
+.admin-home-link span:first-child { font-size: 19px; line-height: 1; }
 .admin-profile { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
 .admin-profile strong { font-size: 12px; }
 .admin-profile small { margin-top: 2px; color: var(--admin-muted); font-size: 10px; }
@@ -190,6 +193,42 @@
 @media (max-width: 560px) {
     .admin-card { padding: 14px; }
     .admin-section-nav { margin-inline: -2px; }
+}
+
+/* Consistent form fields using existing Kidoki colors and spacing. */
+.storefront-shell input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]),
+.storefront-shell select,
+.storefront-shell textarea { box-sizing: border-box; min-height: 44px; border: 1px solid var(--color-border); border-radius: 12px; padding: 10px 13px; color: var(--color-ink); background: #fff; transition: border-color .16s ease, box-shadow .16s ease; }
+.storefront-shell textarea { min-height: 112px; resize: vertical; }
+.storefront-shell input::placeholder, .storefront-shell textarea::placeholder { color: var(--color-muted); opacity: .82; }
+.storefront-shell input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]):focus,
+.storefront-shell select:focus, .storefront-shell textarea:focus { border-color: var(--color-action); outline: 0; box-shadow: 0 0 0 3px rgb(201 46 112 / 12%); }
+.storefront-shell input[aria-invalid=true], .storefront-shell select[aria-invalid=true], .storefront-shell textarea[aria-invalid=true],
+.admin input[aria-invalid=true], .admin select[aria-invalid=true], .admin textarea[aria-invalid=true] { border-color: #c92e70; box-shadow: 0 0 0 2px rgb(201 46 112 / 10%); }
+.storefront-shell input:disabled, .storefront-shell select:disabled, .storefront-shell textarea:disabled,
+.admin input:disabled, .admin select:disabled, .admin textarea:disabled { cursor: not-allowed; opacity: .62; }
+.storefront-shell input[type=checkbox], .storefront-shell input[type=radio] { width: 19px; height: 19px; accent-color: var(--color-action); }
+.admin-form input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]), .admin-form select, .admin-form textarea,
+.admin input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]), .admin select, .admin textarea { box-sizing: border-box; min-height: 44px; border-radius: 11px; }
+.admin .ts-wrapper, .storefront-shell .ts-wrapper { min-width: 0; }
+.admin .ts-control, .storefront-shell .ts-control { min-height: 44px; align-items: center; border-color: var(--color-border); border-radius: 12px; padding: 9px 12px; box-shadow: none; }
+.admin .ts-wrapper.focus .ts-control, .storefront-shell .ts-wrapper.focus .ts-control { border-color: var(--color-action); box-shadow: 0 0 0 3px rgb(201 46 112 / 12%); }
+.admin .ts-dropdown, .storefront-shell .ts-dropdown { z-index: 1000; max-height: min(48vh, 320px); overflow-y: auto; border-color: var(--color-border); border-radius: 12px; box-shadow: 0 12px 28px rgb(89 52 61 / 14%); direction: rtl; }
+.admin .ts-dropdown .active, .storefront-shell .ts-dropdown .active { background: #fdebf0; color: var(--color-ink); }
+.admin .ts-dropdown [data-selectable], .storefront-shell .ts-dropdown [data-selectable] { min-height: 42px; padding: 10px 12px; }
+.product-image-upload .filepond--root { max-width: 100%; margin: 8px 0 0; font-family: inherit; font-size: 13px; }
+.product-image-upload .filepond--panel-root { border: 1px dashed #efded7; border-radius: 14px; background: #fff7f1; }
+.product-image-upload .filepond--drop-label { min-height: 70px; color: #6b4f4f; }
+.product-image-upload .filepond--label-action { color: #c92e70; }
+.product-image-upload .filepond--item-panel { border-radius: 10px; background: #f6b8c8; }
+.product-image-upload .filepond--image-preview-wrapper { border-radius: 10px; }
+.product-image-upload .filepond--file-action-button { cursor: pointer; }
+.product-image-upload .filepond--list { margin-bottom: 0; }
+@media (max-width: 850px) {
+    .admin-topbar { gap: 8px; }
+    .admin-home-link { gap: 4px; padding-inline: 8px; font-size: 10px; }
+    .admin-topbar__actions { gap: 4px; }
+    .admin-global-search { min-width: 38px; }
 }
 
 /* Searchable product-form selects keep the native value for form submission. */

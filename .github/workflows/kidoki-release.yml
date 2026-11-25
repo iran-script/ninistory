@@ -70,7 +70,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
-          extensions: mbstring, intl, pdo_pgsql, redis
+          extensions: gd, mbstring, intl, pdo_pgsql, redis
           coverage: none
           tools: composer:v2
 
@@ -133,6 +133,17 @@ jobs:
           REDIS_PORT: 6379
         run: php artisan test --compact tests/Feature/Phase60ProductSearchTest.php
 
+      - name: Run PostgreSQL product image and publishing regressions
+        env:
+          APP_ENV: ci
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: kidoki_ci
+          DB_USERNAME: kidoki_ci
+          DB_PASSWORD: kidoki_ci_password
+        run: vendor/bin/phpunit --configuration phpunit.xml tests/Feature/AdminCatalogTest.php tests/Feature/Phase57ProductAdministrationTest.php tests/Feature/StorefrontTest.php
+
       - name: Verify Redis cache and queue wiring
         shell: bash
         run: |
@@ -153,7 +164,7 @@ jobs:
         run: |
           set -euo pipefail
           loaded_extensions=$(docker run --rm --entrypoint php "$APP_IMAGE" -d opcache.enable_cli=1 -m)
-          for extension in bcmath intl mbstring opcache pdo_pgsql zip redis; do
+          for extension in bcmath gd intl mbstring opcache pdo_pgsql zip redis; do
             expected_extension="$extension"
             if [ "$extension" = opcache ]; then
               expected_extension='Zend OPcache'
@@ -163,6 +174,26 @@ jobs:
               exit 1
             fi
           done
+          docker run --rm --entrypoint php "$APP_IMAGE" -r '
+            if (! extension_loaded("gd")) {
+                fwrite(STDERR, "GD extension is not loaded.\n");
+                exit(1);
+            }
+            foreach (["getimagesizefromstring", "imagecreatefromstring", "imagecreatetruecolor", "imagecopyresampled", "imagewebp"] as $function) {
+                if (! function_exists($function)) {
+                    fwrite(STDERR, "Required GD image function is unavailable: {$function}\n");
+                    exit(1);
+                }
+            }
+            $formats = gd_info();
+            foreach (["JPEG Support", "PNG Support", "WebP Support"] as $format) {
+                if (empty($formats[$format])) {
+                    fwrite(STDERR, "Required GD image format is unavailable: {$format}\n");
+                    exit(1);
+                }
+            }
+            echo "GD loaded with JPEG, PNG and WebP support.\n";
+          '
 
       - name: Create disposable runtime environment
         shell: bash

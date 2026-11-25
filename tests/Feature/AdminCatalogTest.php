@@ -12,6 +12,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class AdminCatalogTest extends TestCase
@@ -35,10 +36,11 @@ class AdminCatalogTest extends TestCase
 
     public function test_admin_can_create_category_and_product_with_variant_and_audited_stock(): void
     {
+        Storage::fake('public');
         $this->actingAs(User::factory()->create(['is_admin' => true]));
         $this->post(route('admin.categories.store'), ['name' => 'نوزادی', 'slug' => 'newborn', 'sort_order' => 1, 'is_active' => 1])->assertRedirect(route('admin.categories.index'));
         $category = Category::where('slug', 'newborn')->firstOrFail();
-        $this->post(route('admin.products.store'), ['name' => 'لباس نمونه', 'slug' => 'sample-garment', 'category_id' => $category->id, 'is_active' => 1, 'variants' => ['new-a' => ['sku' => 'SAMPLE-1', 'size' => '۲ سال', 'color_name' => 'صورتی', 'price_toman' => 1200000, 'is_active' => 1]]])->assertRedirect();
+        $this->post(route('admin.products.store'), ['name' => 'لباس نمونه', 'slug' => 'sample-garment', 'category_id' => $category->id, 'is_active' => 1, 'images' => [UploadedFile::fake()->image('sample.jpg')], 'variants' => ['new-a' => ['sku' => 'SAMPLE-1', 'size' => '۲ سال', 'color_name' => 'صورتی', 'price_toman' => 1200000, 'is_active' => 1]]])->assertRedirect();
         $product = Product::with('variants')->where('slug', 'sample-garment')->firstOrFail();
         $variant = $product->variants->firstOrFail();
         $this->patch(route('admin.variants.stock', $variant), ['quantity' => 4, 'reason' => 'ثبت موجودی اولیه'])->assertRedirect();
@@ -53,11 +55,12 @@ class AdminCatalogTest extends TestCase
         $category = Category::create(['name' => 'Girls', 'slug' => 'girls', 'is_active' => true, 'sort_order' => 1]);
         $payload = ['name' => 'Photo sample', 'slug' => 'photo-sample', 'category_id' => $category->id, 'variants' => ['new-1' => ['sku' => 'PHOTO-1', 'size' => '3Y', 'color_name' => 'Pink', 'price_toman' => 1000, 'is_active' => 1]]];
         $this->post(route('admin.products.store'), $payload + [
-            'images' => [UploadedFile::fake()->image('cover.jpg', 1200, 1500)],
+            'images' => [UploadedFile::fake()->image("\u{06A9}\u{0627}\u{067E}\u{0634}\u{0646}.jpg", 1200, 1500)],
             'image_alt' => [0 => 'نمای روبه‌رو'],
             'image_caption' => [0 => 'نمای جلوی لباس'],
         ])->assertRedirect();
         $image = Product::where('slug', 'photo-sample')->firstOrFail()->images()->firstOrFail();
+        $this->assertStringNotContainsString("\u{06A9}", $image->path);
         Storage::disk('public')->assertExists($image->path);
         $this->assertSame('jpg', pathinfo($image->path, PATHINFO_EXTENSION));
         $this->assertSame(1200, $image->width);
@@ -66,6 +69,22 @@ class AdminCatalogTest extends TestCase
         $this->assertSame('نمای جلوی لباس', $image->caption);
         Storage::disk('public')->assertExists(app(ImageVariantService::class)->variantPath($image->path, 400));
         Storage::disk('public')->assertExists(app(ImageVariantService::class)->variantPath($image->path, 800));
+    }
+
+    public function test_oversized_product_images_are_rejected_without_creating_a_product(): void
+    {
+        Storage::fake('public');
+        $this->actingAs(User::factory()->create(['is_admin' => true]))
+            ->from(route('admin.products.create'))
+            ->post(route('admin.products.store'), [
+                'name' => 'Oversized image product',
+                'slug' => 'oversized-image-product',
+                'images' => [UploadedFile::fake()->image('oversized.jpg')->size(5121)],
+            ])
+            ->assertRedirect(route('admin.products.create'))
+            ->assertSessionHasErrors('images.0');
+
+        $this->assertDatabaseMissing('products', ['slug' => 'oversized-image-product']);
     }
 
     public function test_category_hierarchy_rejects_cycles(): void
@@ -110,12 +129,14 @@ class AdminCatalogTest extends TestCase
 
     public function test_product_creation_accepts_numeric_form_indexes_for_new_variants(): void
     {
+        Storage::fake('public');
         $this->actingAs(User::factory()->create(['is_admin' => true]));
 
         $this->post(route('admin.products.store'), [
             'name' => 'Numeric variant index',
             'slug' => 'numeric-variant-index',
             'is_active' => 1,
+            'images' => [UploadedFile::fake()->image('numeric-variant.jpg')],
             'variants' => [0 => ['sku' => '', 'size' => '45', 'color_name' => 'Navy', 'price_toman' => '۱۲۵,۰۰۰', 'is_active' => 1]],
         ])->assertSessionDoesntHaveErrors();
 
@@ -131,12 +152,14 @@ class AdminCatalogTest extends TestCase
 
     public function test_product_creation_does_not_archive_new_variants_when_form_is_complete(): void
     {
+        Storage::fake('public');
         $this->actingAs(User::factory()->create(['is_admin' => true]));
 
         $this->post(route('admin.products.store'), [
             'name' => 'Published variant remains visible',
             'slug' => 'published-variant-remains-visible',
             'is_active' => 1,
+            'images' => [UploadedFile::fake()->image('published-variant.jpg')],
             'variants_complete' => 1,
             'variants' => [
                 'new-variant' => [
@@ -258,6 +281,9 @@ class AdminCatalogTest extends TestCase
             ->assertSee('name="save_as_draft"', false)
             ->assertSee('data-generate-variant-combinations', false)
             ->assertSee('new-image-previews')
+            ->assertSee('name="images[]"', false)
+            ->assertSee('href="'.route('home').'"', false)
+            ->assertSee('صفحه اصلی سایت')
             ->assertSee('multipart/form-data', false);
     }
 
@@ -267,30 +293,80 @@ class AdminCatalogTest extends TestCase
 
         $this->get(route('admin.products.create'))
             ->assertOk()
-            ->assertSee('data-searchable-select', false)
+            ->assertSee('data-tom-select', false)
             ->assertSee('name="is_active" value="1"', false)
             ->assertSee('name="is_active" value="0"', false)
             ->assertSee('admin-publication__options', false)
-            ->assertSee('data-searchable-select-wrapper', false);
+            ->assertSee('data-filepond', false)
+            ->assertDontSee('Content review');
     }
 
     public function test_admin_product_publication_state_transitions_between_draft_and_published(): void
     {
+        Storage::fake('public');
         $admin = User::factory()->create(['is_admin' => true]);
-        $product = Product::create(['name' => 'Publication state', 'slug' => 'publication-state', 'is_active' => false]);
+        $category = Category::create(['name' => 'Publication category', 'slug' => 'publication-category', 'is_active' => true]);
+        $product = Product::create(['category_id' => $category->id, 'name' => 'Publication state', 'slug' => 'publication-state', 'is_active' => false]);
         $variant = $product->variants()->create(['sku' => 'PUBLICATION-1', 'size' => '40', 'color_name' => 'Navy', 'price_toman' => 1000, 'is_active' => true]);
 
         $this->actingAs($admin)->put(route('admin.products.update', $product), [
-            'name' => $product->name, 'slug' => $product->slug, 'is_active' => 1, 'variants_complete' => 1,
+            'name' => $product->name, 'slug' => $product->slug, 'category_id' => $category->id, 'is_active' => 1, 'variants_complete' => 1,
+            'images' => [UploadedFile::fake()->image('publication.jpg')],
             'variants' => [$variant->id => ['variant_id' => $variant->id, 'sku' => $variant->sku, 'size' => $variant->size, 'color_name' => $variant->color_name, 'price_toman' => 1000, 'is_active' => 1]],
         ])->assertRedirect();
         $this->assertTrue($product->fresh()->is_active);
+        $this->assertSame('approved', $product->fresh()->content_review_status);
+        $this->assertSame('approved', $product->fresh()->merchant_verification_status);
+        $this->assertDatabaseHas('product_images', ['product_id' => $product->id]);
 
         $this->actingAs($admin)->put(route('admin.products.update', $product), [
             'name' => $product->name, 'slug' => $product->slug, 'is_active' => 0, 'variants_complete' => 1,
             'variants' => [$variant->id => ['variant_id' => $variant->id, 'sku' => $variant->sku, 'size' => $variant->size, 'color_name' => $variant->color_name, 'price_toman' => 1000, 'is_active' => 1]],
         ])->assertRedirect();
         $this->assertFalse($product->fresh()->is_active);
+    }
+
+    public function test_admin_published_product_is_visible_without_review_in_production(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $category = Category::create(['name' => 'Direct publication', 'slug' => 'direct-publication', 'is_active' => true]);
+        $this->actingAs($admin)->post(route('admin.products.store'), [
+            'name' => 'Directly published item',
+            'slug' => 'directly-published-item',
+            'category_id' => $category->id,
+            'is_active' => 1,
+            'images' => [UploadedFile::fake()->image('direct.jpg')],
+            'variants' => ['new-1' => ['sku' => 'DIRECT-1', 'size' => '45', 'color_name' => 'Navy', 'price_toman' => 1000, 'is_active' => 1]],
+        ])->assertRedirect();
+
+        $product = Product::query()->where('slug', 'directly-published-item')->firstOrFail();
+        $this->assertSame('approved', $product->content_review_status);
+        $this->assertSame('approved', $product->merchant_verification_status);
+        $this->app->detectEnvironment(fn (): string => 'production');
+
+        $this->get(route('products.index', ['q' => 'Directly']))->assertOk()->assertSee('Directly published item');
+        $this->get(route('categories.show', $category))->assertOk()->assertSee('Directly published item');
+    }
+
+    public function test_product_creation_rolls_back_when_image_storage_fails(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->mock(ImageVariantService::class)
+            ->shouldReceive('store')
+            ->once()
+            ->andThrow(ValidationException::withMessages(['images' => 'Image storage failed.']));
+
+        $response = $this->actingAs($admin)->from(route('admin.products.create'))->post(route('admin.products.store'), [
+            'name' => 'Storage failure product',
+            'slug' => 'storage-failure-product',
+            'images' => [UploadedFile::fake()->image('storage-failure.jpg')],
+        ]);
+
+        $response->assertRedirect(route('admin.products.create'))->assertSessionHasErrors('images');
+        $this->assertDatabaseMissing('products', ['slug' => 'storage-failure-product']);
+        $this->assertDatabaseCount('product_images', 0);
     }
 
     public function test_admin_product_validation_preserves_submitted_publication_state(): void

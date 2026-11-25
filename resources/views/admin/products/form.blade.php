@@ -8,13 +8,7 @@
     </h1>
     <nav class="admin-section-nav" aria-label="بخش‌های ویرایش محصول"><a href="#product-basic">اطلاعات پایه</a><a href="#product-images">تصاویر</a><a href="#product-variants">تنوع و موجودی</a><a href="#product-seo">انتشار و SEO</a></nav>
     @if ($product->exists)
-        <section class="admin-card mb-5 border-r-4 border-amber-500">
-            <h2 class="mb-2 text-xl font-bold">چک‌لیست آمادگی محصول</h2>
-            @if ($readiness['is_demo'])<p class="mb-2 text-amber-800">این محصول دموی محلی است و برای فروش واقعی تأیید نشده است.</p>@endif
-            @if ($readiness['required']->isNotEmpty())<p class="font-bold">الزامی برای انتشار</p><ul class="list-disc pr-6">@foreach($readiness['required'] as $warning)<li>{{ $warning }}</li>@endforeach</ul>@else<p class="text-green-700">الزامات انتشار تکمیل است.</p>@endif
-            @if ($readiness['recommended']->isNotEmpty())<p class="mt-2 font-bold">پیشنهادهای کیفیت و SEO</p><ul class="list-disc pr-6">@foreach($readiness['recommended'] as $warning)<li>{{ $warning }}</li>@endforeach</ul>@endif
-            <div class="mt-3 rounded-xl bg-slate-50 p-3"><p>وضعیت تأیید merchant: <strong>{{ $product->merchant_verification_status ?? 'pending' }}</strong></p>@if($product->merchant_review_reason)<p class="text-sm">دلیل: {{ $product->merchant_review_reason }}</p>@endif<div class="mt-2 flex flex-wrap gap-2"><form method="post" action="{{ route('admin.products.merchant-verification', $product) }}">@csrf<input type="hidden" name="decision" value="approved"><button class="admin-button" type="submit">تأیید merchant</button></form><form method="post" action="{{ route('admin.products.merchant-verification', $product) }}">@csrf<input type="hidden" name="decision" value="rejected"><input name="reason" placeholder="دلیل رد یا نیاز به اصلاح" class="rounded-lg border p-2"><button class="admin-button admin-button--muted" type="submit">بازگردانی به اصلاح</button></form></div></div>
-        </section>
+
     @endif
 
     <form class="admin-card admin-form" method="post" enctype="multipart/form-data"
@@ -35,7 +29,7 @@
             <input name="sku" dir="ltr" value="{{ old('sku', $product->sku) }}">
         </label>
         <label>دسته‌بندی
-            <select name="category_id" data-searchable-select>
+            <select name="category_id" data-tom-select>
                 <option value="">انتخاب دسته</option>
                 @foreach ($categories as $category)
                     <option value="{{ $category->id }}" @selected(old('category_id', $product->category_id) == $category->id)>
@@ -73,7 +67,7 @@
             <input name="meta_description" value="{{ old('meta_description', $product->meta_description) }}">
         </label>
         <label>دستور ربات
-            <select name="robots_directive" data-searchable-select><option value="">پیش‌فرض</option><option value="index,follow" @selected(old('robots_directive',$product->robots_directive)==='index,follow')>index,follow</option><option value="noindex,follow" @selected(old('robots_directive',$product->robots_directive)==='noindex,follow')>noindex,follow</option><option value="noindex,nofollow" @selected(old('robots_directive',$product->robots_directive)==='noindex,nofollow')>noindex,nofollow</option></select>
+            <select name="robots_directive" data-tom-select><option value="">پیش‌فرض</option><option value="index,follow" @selected(old('robots_directive',$product->robots_directive)==='index,follow')>index,follow</option><option value="noindex,follow" @selected(old('robots_directive',$product->robots_directive)==='noindex,follow')>noindex,follow</option><option value="noindex,nofollow" @selected(old('robots_directive',$product->robots_directive)==='noindex,nofollow')>noindex,nofollow</option></select>
         </label>
         <label class="admin-span">محتوای تکمیلی SEO
             <textarea name="seo_content" rows="4">{{ old('seo_content', $product->seo_content) }}</textarea>
@@ -98,8 +92,10 @@
         <label><span>محصول ویژه</span>
             <input type="checkbox" name="is_featured" value="1" @checked(old('is_featured', $product->is_featured))>
         </label>
-        <label class="admin-span" id="product-images-section">تصاویر گالری <span class="admin-help">حداکثر ۶ تصویر، JPG / PNG / WebP و تا ۵ مگابایت</span>
-            <input id="product-images" type="file" name="images[]" accept="image/jpeg,image/png,image/webp" multiple><progress id="image-upload-progress" class="hidden w-full" max="100" value="0"></progress><span id="image-upload-status" class="text-xs text-slate-500"></span>
+        <label class="admin-span product-image-upload" id="product-images-section">تصاویر گالری <span class="admin-help">حداکثر ۶ تصویر، JPG / PNG / WebP و تا ۵ مگابایت برای هر تصویر</span>
+            <input id="product-images" type="file" name="images[]" accept="image/jpeg,image/png,image/webp" multiple data-filepond data-max-files="{{ max(0, 6 - $product->images->count()) }}"><span id="image-upload-status" class="text-xs text-slate-500"></span>
+            <span class="admin-image-meta"><span>تصویر جلد برای عکس‌های تازه</span><select id="primary-upload-image" aria-label="انتخاب تصویر جلد از عکس‌های تازه"><option value="">انتخاب اولین تصویر</option></select></span>
+            <input type="hidden" name="cover_image_index" id="cover-image-index" value="">
             <span id="new-image-previews" class="admin-image-previews" aria-live="polite"></span>
         </label>
 
@@ -117,14 +113,11 @@
             <textarea name="selling_points" rows="3">{{ old('selling_points', $product->selling_points) }}</textarea>
         </label>
         <div class="admin-span rounded-xl border p-3" id="measurement-editor" data-measurements="{{ e(json_encode(old('measured_dimensions', $product->measured_dimensions ?: []), JSON_UNESCAPED_UNICODE)) }}">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><strong>جدول اندازه‌گیری واقعی (سانتی‌متر)</strong><div class="flex gap-2"><select id="measurement-template" class="rounded-lg border p-2" data-searchable-select><option value="set">ست لباس</option><option value="top">بلوز و سویشرت</option><option value="pants">شلوار</option><option value="dress">پیراهن</option><option value="jacket">کاپشن و کت</option><option value="custom">سفارشی</option></select><button type="button" id="apply-measurement-template" class="rounded-lg border px-3 py-2">بارگذاری ستون‌ها</button></div></div>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><strong>جدول اندازه‌گیری واقعی (سانتی‌متر)</strong><div class="flex gap-2"><select id="measurement-template" class="rounded-lg border p-2" data-tom-select><option value="set">ست لباس</option><option value="top">بلوز و سویشرت</option><option value="pants">شلوار</option><option value="dress">پیراهن</option><option value="jacket">کاپشن و کت</option><option value="custom">سفارشی</option></select><button type="button" id="apply-measurement-template" class="rounded-lg border px-3 py-2">بارگذاری ستون‌ها</button></div></div>
             <div class="overflow-x-auto"><table class="admin-variants min-w-[560px]"><thead id="measurement-head"></thead><tbody id="measurement-body"></tbody></table></div>
             <input type="hidden" name="measured_dimensions" id="measured-dimensions"><button type="button" id="add-measurement-row" class="mt-3 rounded-lg border px-3 py-2">افزودن ردیف اندازه</button>
             <p class="mt-2 text-xs text-slate-500">فقط اندازه‌های واقعی فروشنده را وارد کنید؛ همه مقادیر بر حسب سانتی‌متر و اعشار مجاز است.</p>
         </div>
-        <label>Content review
-            <select name="content_review_status" data-searchable-select><option value="draft" @selected(old('content_review_status', $product->content_review_status) === 'draft')>Draft</option><option value="needs_review" @selected(old('content_review_status', $product->content_review_status) === 'needs_review')>Needs review</option><option value="approved" @selected(old('content_review_status', $product->content_review_status) === 'approved')>Approved</option></select>
-        </label>
 
         @if ($product->exists && $product->images->isNotEmpty())
             <div class="admin-span flex flex-wrap gap-3">
@@ -144,7 +137,7 @@
                             <input name="image_caption[{{ $image->id }}]" value="{{ old('image_caption.'.$image->id, $image->caption) }}">
                         </label>
                         <label class="text-xs">Variant image
-                            <select name="image_variant[{{ $image->id }}]" data-searchable-select><option value="">General color image</option>@foreach($product->variants as $variant)<option value="{{ $variant->id }}" @selected(old('image_variant.'.$image->id, $image->product_variant_id) == $variant->id)>{{ $variant->color_name }} · {{ $variant->size }}</option>@endforeach</select>
+                            <select name="image_variant[{{ $image->id }}]" data-tom-select><option value="">General color image</option>@foreach($product->variants as $variant)<option value="{{ $variant->id }}" @selected(old('image_variant.'.$image->id, $image->product_variant_id) == $variant->id)>{{ $variant->color_name }} · {{ $variant->size }}</option>@endforeach</select>
                         </label>
                         <label class="text-xs">ترتیب
                             <input type="number" min="0" max="65535"
@@ -385,6 +378,7 @@ const inventoryForm=document.querySelector('#bulk-inventory-form');inventoryForm
             colorWrap.append('رنگ',colorField);
             const variantSelect=document.createElement('select');
             variantSelect.name=`image_variant[${index}]`;
+            variantSelect.dataset.tomSelect='';
             variantSelect.add(new Option('تصویر عمومی رنگ',''));
             imageVariants.forEach((variant)=>variantSelect.add(new Option(variant.label,variant.id)));
             const variantWrap=document.createElement('div');
@@ -393,86 +387,9 @@ const inventoryForm=document.querySelector('#bulk-inventory-form');inventoryForm
             variantSelect.addEventListener('change',()=>{const chosen=imageVariants.find((variant)=>String(variant.id)===variantSelect.value);if(chosen)colorField.value=chosen.label.split(' · ')[0]});
             figure.append(image,caption,altWrap,captionWrap,colorWrap,variantWrap);
             previews.append(figure);
+            window.initSearchableSelects?.(figure);
         });
         changed=true;
     });
-})();
-</script>@endpush
-@push('scripts')<script>
-(() => {
-    const normalize = (value) => String(value ?? '').normalize('NFKC').replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/[\s\u200c]+/g, ' ').trim().toLocaleLowerCase();
-    const closeAll = (except) => document.querySelectorAll('[data-searchable-select-wrapper].is-open').forEach((wrapper) => { if (wrapper !== except) { wrapper.classList.remove('is-open'); wrapper.querySelector('.admin-searchable-select__input')?.setAttribute('aria-expanded', 'false'); const list = wrapper.querySelector('.admin-searchable-select__list'); if (list) list.hidden = true; } });
-    const initialize = (select) => {
-        if (select.dataset.searchableInitialized) return;
-        select.dataset.searchableInitialized = '1';
-        const wrapper = document.createElement('div');
-        wrapper.className = 'admin-searchable-select';
-        wrapper.dataset.searchableSelectWrapper = '';
-        select.parentNode.insertBefore(wrapper, select);
-        wrapper.append(select);
-        select.classList.add('admin-searchable-select__native');
-
-        const input = document.createElement('input');
-        input.type = 'search';
-        input.className = 'admin-searchable-select__input';
-        input.setAttribute('role', 'combobox');
-        input.setAttribute('aria-autocomplete', 'list');
-        input.setAttribute('aria-expanded', 'false');
-        input.setAttribute('autocomplete', 'off');
-        input.setAttribute('spellcheck', 'false');
-        const list = document.createElement('div');
-        list.className = 'admin-searchable-select__list';
-        list.setAttribute('role', 'listbox');
-        list.hidden = true;
-        wrapper.append(input, list);
-
-        const options = () => [...select.options].map((option) => ({ option, label: option.textContent.trim(), search: normalize(`${option.textContent} ${option.value}`) }));
-        let visible = [];
-        let activeIndex = -1;
-        const selectedLabel = () => select.selectedOptions[0]?.textContent.trim() || '';
-        const setActive = (index) => {
-            activeIndex = Math.max(-1, Math.min(index, visible.length - 1));
-            list.querySelectorAll('[role="option"]').forEach((item, itemIndex) => {
-                const active = itemIndex === activeIndex;
-                item.classList.toggle('is-active', active);
-                item.setAttribute('aria-selected', active ? 'true' : 'false');
-                if (active) item.scrollIntoView({ block: 'nearest' });
-            });
-        };
-        const render = (query = '') => {
-            const needle = normalize(query);
-            visible = options().filter(({ search }) => !needle || search.includes(needle));
-            list.replaceChildren();
-            visible.forEach(({ option, label }, index) => {
-                const item = document.createElement('button');
-                item.type = 'button';
-                item.className = 'admin-searchable-select__option';
-                item.setAttribute('role', 'option');
-                item.dataset.value = option.value;
-                item.textContent = label || '—';
-                item.addEventListener('mousedown', (event) => event.preventDefault());
-                item.addEventListener('click', () => { select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); input.value = label; close(); });
-                list.append(item);
-                if (index === activeIndex) item.classList.add('is-active');
-            });
-            if (!visible.length) { const empty = document.createElement('p'); empty.className = 'admin-searchable-select__empty'; empty.textContent = 'گزینه‌ای پیدا نشد'; list.append(empty); }
-            setActive(visible.length ? Math.min(activeIndex, visible.length - 1) : -1);
-        };
-        const open = () => { closeAll(wrapper); wrapper.classList.add('is-open'); input.setAttribute('aria-expanded', 'true'); list.hidden = false; input.select(); render(input.value === selectedLabel() ? '' : input.value); };
-        const close = () => { wrapper.classList.remove('is-open'); input.setAttribute('aria-expanded', 'false'); input.value = selectedLabel(); list.hidden = true; activeIndex = -1; };
-        input.addEventListener('focus', open);
-        input.addEventListener('input', () => { list.hidden = false; wrapper.classList.add('is-open'); render(input.value); });
-        input.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') { event.preventDefault(); close(); return; }
-            if (event.key === 'ArrowDown') { event.preventDefault(); if (!wrapper.classList.contains('is-open')) open(); setActive(activeIndex + 1); return; }
-            if (event.key === 'ArrowUp') { event.preventDefault(); setActive(activeIndex - 1); return; }
-            if (event.key === 'Enter' && activeIndex >= 0 && visible[activeIndex]) { event.preventDefault(); select.value = visible[activeIndex].option.value; select.dispatchEvent(new Event('change', { bubbles: true })); close(); }
-        });
-        select.addEventListener('change', () => { input.value = selectedLabel(); });
-        input.value = selectedLabel();
-        list.hidden = true;
-    };
-    document.querySelectorAll('select[data-searchable-select]').forEach(initialize);
-    document.addEventListener('click', (event) => { if (!event.target.closest('[data-searchable-select-wrapper]')) closeAll(); });
 })();
 </script>@endpush

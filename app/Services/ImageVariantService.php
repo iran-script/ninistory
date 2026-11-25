@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class ImageVariantService
 {
@@ -14,11 +16,23 @@ class ImageVariantService
     {
         $disk = Storage::disk('public');
         $contents = $disk->get($path);
-        $source = @imagecreatefromstring($contents);
+        if (! function_exists('getimagesizefromstring')) {
+            return ['width' => null, 'height' => null, 'variants' => []];
+        }
+
         $dimensions = @getimagesizefromstring($contents);
 
-        if (! $source || ! $dimensions || ! function_exists('imagewebp')) {
+        if (! $dimensions) {
+            throw new RuntimeException('The uploaded image could not be read after storage.');
+        }
+
+        if (! function_exists('imagecreatefromstring') || ! function_exists('imagewebp')) {
             return ['width' => $dimensions[0] ?? null, 'height' => $dimensions[1] ?? null, 'variants' => []];
+        }
+
+        $source = @imagecreatefromstring($contents);
+        if (! $source) {
+            throw new RuntimeException('The uploaded image could not be decoded after storage.');
         }
 
         $widths = $widths ?: config('performance.image_variant_widths', [400, 800, 1200]);
@@ -44,10 +58,11 @@ class ImageVariantService
             $encoded = ob_get_clean();
             imagedestroy($target);
 
-            if ($encoded !== false) {
-                $disk->put($variantPath, $encoded);
-                $variants[$width] = $variantPath;
+            if ($encoded === false || ! $disk->put($variantPath, $encoded)) {
+                throw new RuntimeException('Unable to store a generated product image variant.');
             }
+
+            $variants[$width] = $variantPath;
         }
 
         imagedestroy($source);
@@ -75,9 +90,26 @@ class ImageVariantService
 
     public function store(UploadedFile $file, string $directory): array
     {
-        $path = $file->store($directory, 'public');
+        $path = null;
+        try {
+            $path = $file->store($directory, 'public');
+            if (! is_string($path) || $path === '') {
+                throw new RuntimeException('Unable to store the uploaded product image.');
+            }
 
-        return ['path' => $path] + $this->generate($path);
+            return ['path' => $path] + $this->generate($path);
+        } catch (\Throwable $exception) {
+            report($exception);
+            if (is_string($path) && $path !== '') {
+                try {
+                    $this->delete($path);
+                } catch (\Throwable $cleanupException) {
+                    report($cleanupException);
+                }
+            }
+
+            throw ValidationException::withMessages(['images' => 'ذخیره یا آماده‌سازی یکی از تصاویر انجام نشد. تصویر را دوباره انتخاب کنید و دوباره تلاش کنید.']);
+        }
     }
 
     public function delete(string $path): void

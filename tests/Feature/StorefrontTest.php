@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Banner;
+use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -132,6 +133,17 @@ class StorefrontTest extends TestCase
             ->assertSee('loading="lazy"', false)
             ->assertSee('width="1200" height="1500"', false)
             ->assertSee('/storage/products/'.$product->id.'/cover-400.webp 400w', false);
+    }
+
+    public function test_public_category_page_does_not_repeat_subcategories_as_top_chips(): void
+    {
+        $parent = Category::create(['name' => 'Outerwear', 'slug' => 'outerwear', 'is_active' => true]);
+        $child = Category::create(['name' => 'Coats', 'slug' => 'coats', 'parent_id' => $parent->id, 'is_active' => true]);
+
+        $response = $this->get(route('categories.show', $parent))->assertOk();
+
+        $response->assertDontSee('<nav class="mb-5 flex flex-wrap gap-2"', false);
+        $this->assertDatabaseHas('categories', ['id' => $child->id, 'parent_id' => $parent->id]);
     }
 
     public function test_checkout_responses_are_private_and_uncached(): void
